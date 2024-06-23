@@ -1,0 +1,18 @@
+# Byte-compiled
+__pycache__/
+
+# Mypy
+.mypy_cache/
+
+# Databases
+blazegraph.*
+
+# Serialization
+*.ttl
+
+# Others
+impl.py
+failed_impl.py
+impl_gonz.py
+rules.log
+
