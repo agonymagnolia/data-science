@@ -1,3 +1,5 @@
+# -- Metadata Classes
+
 class IdentifiableEntity(object):
     def __init__(self, identifier: str) -> None:
         self.identifier = identifier
@@ -85,6 +87,8 @@ class Model(CulturalHeritageObject):
 class Map(CulturalHeritageObject):
     pass
 
+# -----------------------------------------------------------------------------
+# -- Process Classes
 
 class Activity(object):
     def __init__(self, refersTo: CulturalHeritageObject, institute: str, person: str | None = None, tool: set[str] | None = None, start: str | None = None, end: str | None = None):

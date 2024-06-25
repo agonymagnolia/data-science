@@ -7,7 +7,7 @@ from sparql_dataframe import get
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 MAG = Namespace('https://agonymagnolia.github.io/data-science/')
 
-###################################################################################################################################
+# -----------------------------------------------------------------------------
 
 class Handler(object):
     def __init__(self) -> None:
@@ -23,9 +23,8 @@ class Handler(object):
         else:
             return False
 
-###################################################################################################################################
-
-# Upload Handlers
+# -----------------------------------------------------------------------------
+# -- Upload Handlers
 
 class UploadHandler(Handler):
     def pushDataToDb(self, path: str):
@@ -38,6 +37,18 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         self.store = SPARQLUpdateStore(autocommit=False, context_aware=False, dirty_reads=True) # ! database connection only on commit
         self.store.setTimeout(60)
         self.store.method = 'POST'
+        self.class_dict = {
+            'Nautical chart': 'NauticalChart',
+            'Manuscript plate': 'ManuscriptPlate',
+            'Manuscript volume': 'ManuscriptVolume',
+            'Printed volume': 'PrintedVolume',
+            'Printed material': 'PrintedMaterial',
+            'Herbarium': 'Herbarium',
+            'Specimen': 'Specimen',
+            'Painting': 'Painting',
+            'Model': 'Model',
+            'Map': 'Map'
+        }
         self.entities: set[URIRef] = set() # set of entities
         self.classes: set[URIRef] = set() # set of data model classes
 
@@ -46,7 +57,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             return False
 
         store = self.store
-        endpoint = self.dbPathOrUrl
+        endpoint = self.getDbPathOrUrl()
 
         try:
             store.open((endpoint, endpoint))
@@ -110,20 +121,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
     def pushDataToDb(self, path: str) -> bool:
 
         store = self.store
-        endpoint = self.dbPathOrUrl
-
-        class_dict = {
-            'Nautical chart': 'NauticalChart',
-            'Manuscript plate': 'ManuscriptPlate',
-            'Manuscript volume': 'ManuscriptVolume',
-            'Printed volume': 'PrintedVolume',
-            'Printed material': 'PrintedMaterial',
-            'Herbarium': 'Herbarium',
-            'Specimen': 'Specimen',
-            'Painting': 'Painting',
-            'Model': 'Model',
-            'Map': 'Map'
-        }
+        endpoint = self.getDbPathOrUrl()
 
         df = read_csv(
             path,
@@ -138,7 +136,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         for c in df: 
             df[c] = df[c].str.strip() # trim spaces in every column
 
-        df.className = df.className.map(class_dict) # change corresponding entries based on dictionary, others are turned to NaN
+        df.className = df.className.map(self.class_dict) # change corresponding entries based on dictionary, others are turned to NaN
 
         df.dropna(subset=['identifier', 'className', 'title', 'owner', 'place'], inplace=True) # drop every entity non compliant to the data model
 
@@ -149,7 +147,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
                 self.classes.add(class_name)
                 store.add((MAG[class_name], RDFS.subClassOf, EDM.PhysicalThing))
 
-        array = df.to_numpy(na_value='', dtype=str) # convert DataFrame to numpy ndarray for better performance
+        array = df.to_numpy(dtype=str, na_value='') # convert DataFrame to numpy ndarray for better performance
 
         commits = list()
 
@@ -169,15 +167,13 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         return all(commits)
 
 
-class ProcessDataUploadHandler(UploadHandler):
+class ProcessDataUploadHandler(UploadHandler): # Alberto
     pass
 
-###################################################################################################################################
-
-# Query Handlers
+# -----------------------------------------------------------------------------
+# -- Query Handlers
 
 class QueryHandler(Handler):
-
     def getById(self, identifier: str):
         pass
 
@@ -254,6 +250,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         query = self.personQuery+'\n            }'
 
         df = get(endpoint, query, True)
+        df.sort_values('name', inplace=True, ignore_index=True)
         df['internalId'].replace({str(MAG): ''}, regex=True, inplace=True)
 
         return df
@@ -293,5 +290,24 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         return df
 
 
-class ProcessDataQueryHandler(QueryHandler):
-    pass
+class ProcessDataQueryHandler(QueryHandler): # Lin
+    def getAllActivities(self) -> DataFrame:
+        pass
+
+    def getActivitiesByResponsibleInstitution(self, partialName: str) -> DataFrame:
+        pass
+
+    def getActivitiesByResponsiblePerson(self, partialName: str) -> DataFrame:
+        pass
+
+    def getActivitiesUsingTool(self, partialName: str) -> DataFrame:
+        pass
+
+    def getActivitiesStartedAfter(self, date: str) -> DataFrame:
+        pass
+
+    def getActivitiesEndedBefore(self, date: str) -> DataFrame:
+        pass
+
+    def getAcquisitionsByTechnique(self, partialName: str) -> DataFrame:
+        pass

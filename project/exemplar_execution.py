@@ -14,9 +14,9 @@ from mashups import AdvancedMashup
 # Create the graph database (remember first to run the Blazegraph instance)
 grp_endpoint = "http://127.0.0.1:9999/blazegraph/sparql"
 metadata = MetadataUploadHandler()
-metadata.setDbPathOrUrl(grp_endpoint)
-metadata.pushDataToDb("data/meta.csv")
-metadata.pushDataToDb("data/meta.csv")
+print(metadata.setDbPathOrUrl(grp_endpoint))
+print(metadata.pushDataToDb("data/meta.csv"))
+print(metadata.pushDataToDb("data/meta.csv"))
 
 # Create the query handlers for both databases
 #process_qh = ProcessDataQueryHandler()
