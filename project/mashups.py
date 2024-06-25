@@ -1,3 +1,9 @@
+import data_model_classes
+from data_model_classes import *
+from handlers import ProcessDataUploadHandler, MetadataUploadHandler, ProcessDataQueryHandler, MetadataQueryHandler
+from pandas import notna
+
+
 class BasicMashup:
     def __init__(self):
         self.metadataQuery = []
@@ -62,7 +68,7 @@ class BasicMashup:
         for row in df.to_numpy(dtype=object, na_value=None):
             if objId != row[0]:
                 objId = row[0]
-                objClass = globals()[row[1]]
+                objClass = vars(data_model_classes)[row[1]]
                 result.append(objClass(identifier=str(row[2]), title=row[3], owner=row[4], place=row[5], date=row[6]))
 
             if row[7]:
@@ -70,3 +76,7 @@ class BasicMashup:
                 result[-1].hasAuthor.append(person)
 
         return result
+
+
+class AdvancedMashup(BasicMashup):
+    pass

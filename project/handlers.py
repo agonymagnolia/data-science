@@ -1,4 +1,4 @@
-from rdflib import URIRef, Literal, Namespace, Node
+from rdflib import URIRef, Literal, Namespace
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from pandas import DataFrame, read_csv, unique, merge, concat, notna
@@ -36,17 +36,17 @@ class MetadataUploadHandler(UploadHandler): # Francesca
     def __init__(self) -> None:
         super().__init__()
         self.store = SPARQLUpdateStore(autocommit=False, context_aware=False, dirty_reads=True) # ! database connection only on commit
-        self.store.setTimeout(600)
+        self.store.setTimeout(60)
         self.store.method = 'POST'
-        self.entities: set[Node] = set() # set of entities
-        self.classes: set[Node] = set() # set of data model classes
+        self.entities: set[URIRef] = set() # set of entities
+        self.classes: set[URIRef] = set() # set of data model classes
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
         if not super().setDbPathOrUrl(newDbPathOrUrl):
             return False
 
-        endpoint = self.dbPathOrUrl
         store = self.store
+        endpoint = self.dbPathOrUrl
 
         try:
             store.open((endpoint, endpoint))
