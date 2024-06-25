@@ -63,54 +63,56 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         except Exception:
             return False
 
+    def _chunker(self, array: 'numpy.ndarray', size: int) -> 'Generator':
+        return (array[pos:pos + size] for pos in range(0, len(array), size)) # size is the step of the range
+
+    def _mapper(self, array: 'numpy.ndarray', store: SPARQLUpdateStore) -> None:
+        for row in array:
+            subject = MAG['CulturalHeritageObject-' + row[0]]
+
+            if subject in self.entities:
+                continue
+
+            self.entities.add(subject)
+            store.add((subject, DC.identifier, Literal(row[0])))
+            store.add((subject, RDF.type, MAG[row[1]]))
+            store.add((subject, DC.title, Literal(row[2])))
+            store.add((subject, EDM.currentLocation, Literal(row[5])))
+            store.add((subject, DC.coverage, Literal(row[6])))
+
+            if row[3]:
+                store.add((subject, DC.date, Literal(row[3])))
+
+            if row[4]:
+                for author_str in row[4].split('; '):
+
+                    try:
+                        i = author_str.index('(')
+                    except ValueError:
+                        continue
+
+                    name, identifier = author_str[:i-1], author_str[i+1:-1]
+
+                    if not name or not identifier:
+                        continue
+
+                    author = MAG['Person-' + identifier]
+
+                    if author not in self.entities:
+                        self.entities.add(author)
+                        store.add((author, RDF.type, EDM.Agent))
+                        store.add((author, DC.identifier, Literal(identifier)))
+                        store.add((author, FOAF.name, Literal(name)))
+                    
+                    store.add((subject, DC.creator, author))
+
+
     def pushDataToDb(self, path: str) -> bool:
 
         store = self.store
         endpoint = self.dbPathOrUrl
 
-        def chunker(array: 'numpy.ndarray', size: int) -> 'Generator':
-            return (array[pos:pos + size] for pos in range(0, len(array), size)) # size is the step of the range
-
-        def mapper(chunk: 'numpy.ndarray', store: SPARQLUpdateStore) -> None:
-            for row in chunk:
-                subject = MAG['CulturalHeritageObject-'+row[0]]
-
-                if subject in self.entities:
-                    continue
-
-                self.entities.add(subject)
-                store.add((subject, DC.identifier, Literal(row[0])))
-                store.add((subject, RDF.type, MAG[row[1]]))
-                store.add((subject, DC.title, Literal(row[2])))
-                store.add((subject, EDM.currentLocation, Literal(row[5])))
-                store.add((subject, DC.coverage, Literal(row[6])))
-
-                if row[3]:
-                    store.add((subject, DC.date, Literal(row[3])))
-
-                if row[4]:
-                    for authorStr in row[4].split('; '):
-                        try:
-                            i = authorStr.index('(')
-                            name, identifier = authorStr[:i-1], authorStr[i+1:-1]
-
-                            if not name or not identifier:
-                                continue
-
-                            author = MAG['Person-'+identifier]
-
-                            if author not in self.entities:
-                                self.entities.add(author)
-                                store.add((author, RDF.type, EDM.Agent))
-                                store.add((author, DC.identifier, Literal(identifier)))
-                                store.add((author, FOAF.name, Literal(name)))
-                            
-                            store.add((subject, DC.creator, author))
-
-                        except Exception:
-                            continue
-
-        classDict = {
+        class_dict = {
             'Nautical chart': 'NauticalChart',
             'Manuscript plate': 'ManuscriptPlate',
             'Manuscript volume': 'ManuscriptVolume',
@@ -136,23 +138,23 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         for c in df: 
             df[c] = df[c].str.strip() # trim spaces in every column
 
-        df.className = df.className.map(classDict) # change corresponding entries based on dictionary, others are turned to NaN
+        df.className = df.className.map(class_dict) # change corresponding entries based on dictionary, others are turned to NaN
 
         df.dropna(subset=['identifier', 'className', 'title', 'owner', 'place'], inplace=True) # drop every entity non compliant to the data model
 
         df.drop_duplicates(subset='identifier', inplace=True) # drop potential duplicated entities
 
-        for className in df.className.unique():
-            if className not in self.classes:
-                self.classes.add(className)
-                store.add((MAG[className], RDFS.subClassOf, EDM.PhysicalThing))
+        for class_name in df.className.unique():
+            if class_name not in self.classes:
+                self.classes.add(class_name)
+                store.add((MAG[class_name], RDFS.subClassOf, EDM.PhysicalThing))
 
         array = df.to_numpy(na_value='', dtype=str) # convert DataFrame to numpy ndarray for better performance
 
         commits = list()
 
-        for chunk in chunker(array, 1000): # commit array data in chunks to prevent reaching HTTP request size limit
-            mapper(chunk, store)
+        for chunk in self._chunker(array, 1000): # commit array data in chunks to prevent reaching HTTP request size limit
+            self._mapper(chunk, store)
 
             try:
                 store.open((endpoint, endpoint))
