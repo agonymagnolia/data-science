@@ -1,10 +1,11 @@
 from rdflib import URIRef, Literal, Namespace
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
-from pandas import DataFrame, read_csv, unique, merge, concat, notna, json_normalize
+from pandas import DataFrame, read_csv, unique, merge, concat, notna, json_normalize, read_sql_query
 from json import load
 from sqlite3 import connect
 from SPARQLWrapper import SPARQLWrapper, JSON, SELECT, POST, POSTDIRECTLY
+import pprint
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 MAG = Namespace('https://agonymagnolia.github.io/data-science/')
@@ -170,49 +171,58 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
-    def _column_mapping(self, label: str) -> dict[str, str]:
+    def _mapper(self, label: str) -> dict[str, str]:
         base_dict = {
-            'responsible institute': 'institute',
-            'responsible person': 'person',
-            'technique': 'technique',
-            'tool': 'tool',
-            'start date': 'start',
-            'end date': 'end'
+            '%s.responsible institute': 'institute',
+            '%s.responsible person': 'person',
+            '%s.technique': 'technique',
+            '%s.tool': 'tool',
+            '%s.start date': 'start',
+            '%s.end date': 'end'
         }
 
-        d = {label+'-'+key: value for key, value in base_dict.items()}
-        d.update({'object id': 'objectId'})
-
-        return d
+        return {key % label: value for key, value in base_dict.items()}
 
     def pushDataToDb(self, path: str) -> bool:
         with open(path, 'r', encoding='utf-8') as f:
             json_doc = load(f)
 
-        df = json_normalize(json_doc, sep='-')
+        df = json_normalize(json_doc).rename(columns={'object id': 'refersTo'})
 
-        acquisition = df.iloc[:, 0:7].rename(columns=self._column_mapping('acquisition'))
-        processing = df.iloc[:, [0, 7, 8, 9, 10, 11]].rename(columns=self._column_mapping('processing'))
-        modelling = df.iloc[:, [0, 12, 13, 14, 15, 16]].rename(columns=self._column_mapping('modelling'))
-        optimising = df.iloc[:, [0, 17, 18, 19, 20, 21]].rename(columns=self._column_mapping('optimising'))
-        exporting = df.iloc[:, [0, 22, 23, 24, 25, 26]].rename(columns=self._column_mapping('exporting'))
+        acquisition = df.iloc[:, 0:7].rename(columns=self._mapper('acquisition'))
+        processing = df.iloc[:, [0, 7, 8, 9, 10, 11]].rename(columns=self._mapper('processing'))
+        modelling = df.iloc[:, [0, 12, 13, 14, 15, 16]].rename(columns=self._mapper('modelling'))
+        optimising = df.iloc[:, [0, 17, 18, 19, 20, 21]].rename(columns=self._mapper('optimising'))
+        exporting = df.iloc[:, [0, 22, 23, 24, 25, 26]].rename(columns=self._mapper('exporting'))
 
-        activities = [acquisition, processing, modelling, optimising, exporting]
+        activities = {
+            'Acquisition': acquisition,
+            'Processing': processing,
+            'Modelling': modelling,
+            'Optimising': optimising,
+            'Exporting': exporting
+        }
 
-        # convert column with list (tool)
-        for activity in activities:
+        # Convert tool list to string
+        for name, activity in activities.items():
             activity['tool'] = activity['tool'].str.join(',')
 
         # adding tables to the database
         database = self.getDbPathOrUrl()
         with connect(database) as con:
-            for activity in activities:
-                activity.to_sql(f'{activity=}', con, if_exists='replace', index=False)
-        """ cursor = con.cursor()
-            cursor.execute('SELECT name FROM sqlite_master WHERE type='table';')
+            for name, activity in activities.items():
+                activity.to_sql(name, con, if_exists='replace', index=False, dtype='TEXT')
+
+            # print for check
+            cursor = con.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = cursor.fetchall()
             for table in tables:
-                printer.pprint(table) """
+                table_name = table[0]
+                print(table_name)
+                table_df = read_sql_query(f"SELECT * FROM {table_name}", con, dtype='string')
+                print(table_df)
+
         return True
         
 

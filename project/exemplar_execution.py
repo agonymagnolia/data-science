@@ -9,7 +9,7 @@ rel_path = 'relational.db'
 process = ProcessDataUploadHandler()
 process.setDbPathOrUrl(rel_path)
 print(process.pushDataToDb('data/process.json'))
-print(process.pushDataToDb('data/process.json')) # test to handle multiple pushes
+#print(process.pushDataToDb('data/process.json')) # test to handle multiple pushes
 
 # Create the graph database (remember first to run the Blazegraph instance)
 grp_endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'
