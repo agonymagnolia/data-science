@@ -6,6 +6,7 @@ __pycache__/
 
 # Databases
 blazegraph.*
+relational.db
 
 # Serialization
 *.ttl
