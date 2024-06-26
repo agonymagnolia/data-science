@@ -5,11 +5,11 @@ from handlers import ProcessDataUploadHandler, MetadataUploadHandler, ProcessDat
 from mashups import AdvancedMashup
 
 # Create the relational database
-#rel_path = 'relational.db'
-#process = ProcessDataUploadHandler()
-#process.setDbPathOrUrl(rel_path)
-#process.pushDataToDb('data/process.json')
-#process.pushDataToDb('data/process.json') # test to handle multiple pushes
+rel_path = 'relational.db'
+process = ProcessDataUploadHandler()
+process.setDbPathOrUrl(rel_path)
+print(process.pushDataToDb('data/process.json'))
+print(process.pushDataToDb('data/process.json')) # test to handle multiple pushes
 
 # Create the graph database (remember first to run the Blazegraph instance)
 grp_endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'

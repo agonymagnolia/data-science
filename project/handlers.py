@@ -1,7 +1,9 @@
 from rdflib import URIRef, Literal, Namespace
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
-from pandas import DataFrame, read_csv, unique, merge, concat, notna
+from pandas import DataFrame, read_csv, unique, merge, concat, notna, json_normalize
+from json import load
+from sqlite3 import connect
 from SPARQLWrapper import SPARQLWrapper, JSON, SELECT, POST, POSTDIRECTLY
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
@@ -168,7 +170,51 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
-    pass
+    def _column_mapping(self, label: str) -> dict[str, str]:
+        base_dict = {
+            'responsible institute': 'institute',
+            'responsible person': 'person',
+            'technique': "technique",
+            "tool": "tool",
+            "start date": "start",
+            "end date": "end"
+        }
+
+        d = {label+'-'+key: value for key, value in base_dict.items()}
+        d.update({"object id": "objectId"})
+
+        return d
+
+    def pushDataToDb(self, path: str) -> bool:
+        with open(path, "r", encoding="utf-8") as f:
+            json_doc = load(f)
+
+        df = json_normalize(json_doc, sep='-')
+
+        acquisition = df.iloc[:, 0:7].rename(columns=self._column_mapping('acquisition'))
+        processing = df.iloc[:, [0, 7, 8, 9, 10, 11]].rename(columns=self._column_mapping('processing'))
+        modelling = df.iloc[:, [0, 12, 13, 14, 15, 16]].rename(columns=self._column_mapping('modelling'))
+        optimising = df.iloc[:, [0, 17, 18, 19, 20, 21]].rename(columns=self._column_mapping('optimising'))
+        exporting = df.iloc[:, [0, 22, 23, 24, 25, 26]].rename(columns=self._column_mapping('exporting'))
+
+        activities = [acquisition, processing, modelling, optimising, exporting]
+
+        # convert column with list (tool)
+        for activity in activities:
+            activity['tool'] = activity['tool'].str.join(',')
+
+        # adding tables to the database
+        database = self.getDbPathOrUrl()
+        with connect(database) as con:
+            for activity in activities:
+                activity.to_sql(f'{activity=}', con, if_exists="replace", index=False)
+        """     cursor = con.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = cursor.fetchall()
+            for table in tables:
+                printer.pprint(table) """
+        return True
+        
 
 # -----------------------------------------------------------------------------
 # -- Query Handlers
