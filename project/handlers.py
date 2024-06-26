@@ -219,9 +219,9 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         sparql.setReturnFormat(JSON)
 
         result = sparql.query().convert()
-        head, data = result['head']['vars'], result['results']['bindings']
+        meta, record = result['head']['vars'], result['results']['bindings']
 
-        return DataFrame([{key: value['value'] for key, value in entry.items()} for entry in data], columns=head, dtype='string')
+        return DataFrame([{key: value['value'] for key, value in entry.items()} for entry in record], columns=meta, dtype='string')
 
     def mergeAuthors(self, endpoint: str, df: DataFrame) -> DataFrame:
         values = ''
