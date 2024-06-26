@@ -173,15 +173,15 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 class ProcessDataUploadHandler(UploadHandler): # Alberto
     def _mapper(self, label: str) -> dict[str, str]:
         base_dict = {
-            '%s.responsible institute': 'institute',
-            '%s.responsible person': 'person',
-            '%s.technique': 'technique',
-            '%s.tool': 'tool',
-            '%s.start date': 'start',
-            '%s.end date': 'end'
+            f'{label}.responsible institute': 'institute',
+            f'{label}.responsible person': 'person',
+            f'{label}.technique': 'technique',
+            f'{label}.tool': 'tool',
+            f'{label}.start date': 'start',
+            f'{label}.end date': 'end'
         }
 
-        return {key % label: value for key, value in base_dict.items()}
+        return base_dict
 
     def pushDataToDb(self, path: str) -> bool:
         with open(path, 'r', encoding='utf-8') as f:
