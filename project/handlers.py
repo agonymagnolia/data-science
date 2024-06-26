@@ -2,7 +2,7 @@ from rdflib import URIRef, Literal, Namespace
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from pandas import DataFrame, read_csv, unique, merge, concat, notna
-from sparql_dataframe import get
+from SPARQLWrapper import SPARQLWrapper, JSON, SELECT, POST, POSTDIRECTLY
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 MAG = Namespace('https://agonymagnolia.github.io/data-science/')
@@ -37,7 +37,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         self.store = SPARQLUpdateStore(autocommit=False, context_aware=False, dirty_reads=True) # ! database connection only on commit
         self.store.setTimeout(60)
         self.store.method = 'POST'
-        self.class_dict = {
+        self.classDict = {
             'Nautical chart': 'NauticalChart',
             'Manuscript plate': 'ManuscriptPlate',
             'Manuscript volume': 'ManuscriptVolume',
@@ -136,7 +136,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         for c in df: 
             df[c] = df[c].str.strip() # trim spaces in every column
 
-        df.className = df.className.map(self.class_dict) # change corresponding entries based on dictionary, others are turned to NaN
+        df.className = df.className.map(self.classDict) # change corresponding entries based on dictionary, others are turned to NaN
 
         df.dropna(subset=['identifier', 'className', 'title', 'owner', 'place'], inplace=True) # drop every entity non compliant to the data model
 
@@ -209,6 +209,20 @@ class MetadataQueryHandler(QueryHandler): # Francesca
                                 foaf:name ?name .
             """
 
+    def to_df(self, endpoint: str, query: str) -> DataFrame:
+        sparql = SPARQLWrapper(endpoint)
+        sparql.setQuery(query)
+
+        sparql.setOnlyConneg(True)
+        sparql.setMethod(POST)
+        sparql.setRequestMethod(POSTDIRECTLY)
+        sparql.setReturnFormat(JSON)
+
+        result = sparql.query().convert()
+        head, data = result['head']['vars'], result['results']['bindings']
+
+        return DataFrame([{key: value['value'] for key, value in entry.items()} for entry in data], columns=head, dtype='string')
+
     def mergeAuthors(self, endpoint: str, df: DataFrame) -> DataFrame:
         values = ''
         for author in df['hasAuthor'].dropna().unique():
@@ -220,10 +234,11 @@ class MetadataQueryHandler(QueryHandler): # Francesca
             }}
             """
 
-        df = df.merge(get(endpoint, query, True), how='left', left_on='hasAuthor', right_on=f'internalId', suffixes=('', '_p'))
+        df = df.merge(self.to_df(endpoint, query), how='left', left_on='hasAuthor', right_on=f'internalId', suffixes=('', '_p'))
         df.drop(columns=['internalId_p'], inplace=True)
 
         return df
+
 
     def getById(self, identifier: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
@@ -232,11 +247,11 @@ class MetadataQueryHandler(QueryHandler): # Francesca
             }}
             """
         query = self.objectQuery + values
-        df = get(endpoint, query, True)
+        df = self.to_df(endpoint, query)
 
         if df.empty:
             query = self.personQuery + values
-            df = get(endpoint, query, True)
+            df = self.to_df(endpoint, query)
 
         elif df['hasAuthor'].notna().all():
             df = self.mergeAuthors(endpoint, df)
@@ -247,22 +262,21 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
     def getAllPeople(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = self.personQuery+'\n            }'
+        query = self.personQuery+'\n            } ORDER BY ?name'
 
-        df = get(endpoint, query, True)
-        df.sort_values('name', inplace=True, ignore_index=True)
+        df = self.to_df(endpoint, query)
         df['internalId'].replace({str(MAG): ''}, regex=True, inplace=True)
 
         return df
 
     def getAllCulturalHeritageObjects(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = self.objectQuery+'\n            }'
+        query = self.objectQuery+'\n            } ORDER BY xsd:integer(?identifier)'
 
-        df = get(endpoint, query, True)
+        df = self.to_df(endpoint, query)
         df = self.mergeAuthors(endpoint, df)
+        print(str(MAG))
 
-        df.sort_values('identifier', inplace=True, ignore_index=True)
         df.replace({str(MAG): ''}, regex=True, inplace=True)
 
         return df
@@ -272,7 +286,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         endpoint = self.getDbPathOrUrl()
         query = self.personQuery+f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n            }}'
 
-        df = get(endpoint, query, True)
+        df = self.to_df(endpoint, query)
         df['internalId'].replace({str(MAG): ''}, regex=True, inplace=True)
 
         return df
@@ -281,7 +295,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         endpoint = self.getDbPathOrUrl()
         query = self.objectQuery+f'        ?internalId dc:creator / dc:identifier "{personId}" .\n            }}'
 
-        df = get(endpoint, query, True)
+        df = self.to_df(endpoint, query)
         df = self.mergeAuthors(endpoint, df)
 
         df.sort_values('identifier', inplace=True, ignore_index=True)

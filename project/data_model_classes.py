@@ -21,13 +21,23 @@ class Person(IdentifiableEntity):
 
 
 class CulturalHeritageObject(IdentifiableEntity):
-    def __init__(self, identifier: str, title: str, owner: str, place: str, date: str | None = None, hasAuthor: list[Person] | None = None) -> None:
+    def __init__(
+        self,
+        identifier: str,
+        title: str,
+        owner: str,
+        place: str,
+        date: str | None = None,
+        hasAuthor: list[Person] | None = None
+        ) -> None:
         super().__init__(identifier=identifier)
         self.title = title
         self.owner = owner
         self.place = place
         self.date = date
-        self.hasAuthor = list() if hasAuthor is None else hasAuthor # Otherwhise the empty list set as default value is shared among all the instances of the class
+        # Setting the default value directly as empty list would
+        # share the same list among all the instances of the class
+        self.hasAuthor = list() if hasAuthor is None else hasAuthor
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(id={self.identifier!r}, title={self.title!r}, owner={self.owner!r}, place={self.place!r}, date={self.date!r}, hasAuthor={self.hasAuthor!r})'
@@ -91,12 +101,23 @@ class Map(CulturalHeritageObject):
 # -- Process Classes
 
 class Activity(object):
-    def __init__(self, refersTo: CulturalHeritageObject, institute: str, person: str | None = None, tool: set[str] | None = None, start: str | None = None, end: str | None = None):
+    def __init__(
+        self,
+        refersTo: CulturalHeritageObject,
+        institute: str,
+        person: str | None = None,
+        tool: set[str] | None = None,
+        start: str | None = None,
+        end: str | None = None
+        ) -> None:
         self.institute = institute
         self.person = person
+        # Same as the hasAuthor list
         self.tool = set() if tool is None else tool
         self.start = start
         self.end = end
+        # Since the relation is homonymous with the method accessing it,
+        # it is declared as internal and renamed via the property decorator
         self._refersTo = refersTo
 
     def __repr__(self) -> str:
@@ -122,14 +143,21 @@ class Activity(object):
         return self._refersTo
 
     @refersTo.setter
-    def refersTo(self, value) -> None:
+    def refersTo(self, value: CulturalHeritageObject) -> None:
         self._refersTo = value
 
 
 class Acquisition(Activity):
-    technique: str
-
-    def __init__(self, refersTo: CulturalHeritageObject, technique: str, institute: str, person: str | None = None, tool: set[str] = set(), start: str | None = None, end: str | None = None):
+    def __init__(
+        self,
+        refersTo: CulturalHeritageObject,
+        technique: str,
+        institute: str,
+        person: str | None = None,
+        tool: set[str] = set(),
+        start: str | None = None,
+        end: str | None = None
+        ) -> None:
         super().__init__(refersTo, institute, person, tool, start, end)
         self.technique = technique
 

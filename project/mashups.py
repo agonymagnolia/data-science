@@ -98,7 +98,7 @@ class BasicMashup:
                 if obj_id != row[0]:
                     obj_id = row[0]
                     obj_class = eval(row[1])
-                    result.append(obj_class(identifier=str(row[2]), title=row[3], owner=row[4], place=row[5], date=row[6]))
+                    result.append(obj_class(identifier=row[2], title=row[3], owner=row[4], place=row[5], date=row[6]))
 
                 if row[7]:
                     author = Person(identifier=row[8], name=row[9])
