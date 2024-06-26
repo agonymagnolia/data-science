@@ -207,9 +207,9 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         database = self.getDbPathOrUrl()
         with connect(database) as con:
             for activity in activities:
-                activity.to_sql(f'{activity=}', con, if_exists="replace", index=False)
+                activity.to_sql(f'{activity=}', con, if_exists='replace', index=False)
         """ cursor = con.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            cursor.execute('SELECT name FROM sqlite_master WHERE type='table';')
             tables = cursor.fetchall()
             for table in tables:
                 printer.pprint(table) """
