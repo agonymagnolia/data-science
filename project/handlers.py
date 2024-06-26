@@ -174,19 +174,19 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         base_dict = {
             'responsible institute': 'institute',
             'responsible person': 'person',
-            'technique': "technique",
-            "tool": "tool",
-            "start date": "start",
-            "end date": "end"
+            'technique': 'technique',
+            'tool': 'tool',
+            'start date': 'start',
+            'end date': 'end'
         }
 
         d = {label+'-'+key: value for key, value in base_dict.items()}
-        d.update({"object id": "objectId"})
+        d.update({'object id': 'objectId'})
 
         return d
 
     def pushDataToDb(self, path: str) -> bool:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, 'r', encoding='utf-8') as f:
             json_doc = load(f)
 
         df = json_normalize(json_doc, sep='-')
@@ -208,7 +208,7 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         with connect(database) as con:
             for activity in activities:
                 activity.to_sql(f'{activity=}', con, if_exists="replace", index=False)
-        """     cursor = con.cursor()
+        """ cursor = con.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = cursor.fetchall()
             for table in tables:
