@@ -1,14 +1,48 @@
-from rdflib import URIRef, Literal, Namespace
+"""
+This module provides utilities for data processing.
+"""
+
+from rdflib import URIRef, Literal, Namespace, Graph
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
-from pandas import DataFrame, read_csv, unique, merge, concat, notna, json_normalize, read_sql_query
+from pandas import DataFrame, read_csv, unique, merge, concat, notna, json_normalize, read_sql_query, NA, set_option
+from sparql_dataframe import get
 from json import load
 from sqlite3 import connect
-from SPARQLWrapper import SPARQLWrapper, JSON, SELECT, POST, POSTDIRECTLY
-import pprint
+
+set_option('display.max_rows', 500)
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 MAG = Namespace('https://agonymagnolia.github.io/data-science/')
+
+OBJECT_QUERY = """
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX dc: <http://purl.org/dc/elements/1.1/>
+    PREFIX edm: <http://www.europeana.eu/schemas/edm/>
+
+    SELECT DISTINCT ?internalId ?class ?identifier ?title ?owner ?place ?date ?hasAuthor
+    WHERE {
+            ?class rdfs:subClassOf edm:PhysicalThing .
+            ?internalId a ?class ;
+                        dc:identifier ?identifier ;
+                        dc:title ?title ;
+                        edm:currentLocation ?owner ;
+                        dc:coverage ?place .
+
+            OPTIONAL {?internalId dc:date ?date . }
+            OPTIONAL {?internalId dc:creator ?hasAuthor . }
+    """
+PERSON_QUERY = """
+    PREFIX dc: <http://purl.org/dc/elements/1.1/>
+    PREFIX edm: <http://www.europeana.eu/schemas/edm/>
+    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+    SELECT DISTINCT ?internalId ?identifier ?name
+    WHERE {
+            ?internalId a edm:Agent ;
+                        dc:identifier ?identifier ;
+                        foaf:name ?name .
+    """
 
 # -----------------------------------------------------------------------------
 
@@ -30,7 +64,7 @@ class Handler(object):
 # -- Upload Handlers
 
 class UploadHandler(Handler):
-    def pushDataToDb(self, path: str):
+    def pushDataToDb(self, path: str, replace: bool = False):
         pass
 
 
@@ -53,7 +87,6 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             'Map': 'Map'
         }
         self.entities: set[URIRef] = set() # set of entities
-        self.classes: set[URIRef] = set() # set of data model classes
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
         if not super().setDbPathOrUrl(newDbPathOrUrl):
@@ -64,42 +97,34 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
         try:
             store.open((endpoint, endpoint))
-
-            for subject in store.subjects(predicate=RDF.type):
-                self.entities.add(subject)
-
-            for subject in store.subjects(predicate=RDFS.subClassOf):
-                self.classes.add(subject)
-
+            self.entities.update(store.subjects(predicate=RDF.type))
             store.close()
             return True
-
         except Exception:
             return False
 
     def _chunker(self, array: 'numpy.ndarray', size: int) -> 'Generator':
         return (array[pos:pos + size] for pos in range(0, len(array), size)) # size is the step of the range
 
-    def _mapper(self, array: 'numpy.ndarray', store: SPARQLUpdateStore) -> None:
+    def _mapper(self, array: 'numpy.ndarray', graph: Graph) -> None:
         for row in array:
-            subject = MAG['CulturalHeritageObject-' + row[0]]
+            subject = MAG['cho-' + row[0]]
 
             if subject in self.entities:
                 continue
 
             self.entities.add(subject)
-            store.add((subject, DC.identifier, Literal(row[0])))
-            store.add((subject, RDF.type, MAG[row[1]]))
-            store.add((subject, DC.title, Literal(row[2])))
-            store.add((subject, EDM.currentLocation, Literal(row[5])))
-            store.add((subject, DC.coverage, Literal(row[6])))
+            graph.add((subject, DC.identifier, Literal(row[0])))
+            graph.add((subject, RDF.type, MAG[row[1]]))
+            graph.add((subject, DC.title, Literal(row[2])))
+            graph.add((subject, EDM.currentLocation, Literal(row[5])))
+            graph.add((subject, DC.coverage, Literal(row[6])))
 
             if row[3]:
-                store.add((subject, DC.date, Literal(row[3])))
+                graph.add((subject, DC.date, Literal(row[3])))
 
             if row[4]:
                 for author_str in row[4].split('; '):
-
                     try:
                         i = author_str.index('(')
                     except ValueError:
@@ -110,22 +135,21 @@ class MetadataUploadHandler(UploadHandler): # Francesca
                     if not name or not identifier:
                         continue
 
-                    author = MAG['Person-' + identifier]
+                    author = MAG['person-' + identifier]
 
                     if author not in self.entities:
                         self.entities.add(author)
-                        store.add((author, RDF.type, EDM.Agent))
-                        store.add((author, DC.identifier, Literal(identifier)))
-                        store.add((author, FOAF.name, Literal(name)))
+                        graph.add((author, RDF.type, EDM.Agent))
+                        graph.add((author, DC.identifier, Literal(identifier)))
+                        graph.add((author, FOAF.name, Literal(name)))
                     
-                    store.add((subject, DC.creator, author))
+                    graph.add((subject, DC.creator, author))
 
 
-    def pushDataToDb(self, path: str) -> bool:
-
+    def pushDataToDb(self, path: str, replace: bool = False) -> bool:
         store = self.store
+        graph = Graph(store) # link graph to store to commit directly the graph triples to the database
         endpoint = self.getDbPathOrUrl()
-
         df = read_csv(
             path,
             header=0,
@@ -133,37 +157,32 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             dtype='string',
             on_bad_lines='skip',
             engine='c',
-            memory_map=True
+            memory_map=True,
             )
 
         for c in df: 
             df[c] = df[c].str.strip() # trim spaces in every column
 
         df.className = df.className.map(self.classDict) # change corresponding entries based on dictionary, others are turned to NaN
-
         df.dropna(subset=['identifier', 'className', 'title', 'owner', 'place'], inplace=True) # drop every entity non compliant to the data model
-
         df.drop_duplicates(subset='identifier', inplace=True) # drop potential duplicated entities
 
         for class_name in df.className.unique():
-            if class_name not in self.classes:
-                self.classes.add(class_name)
-                store.add((MAG[class_name], RDFS.subClassOf, EDM.PhysicalThing))
+            graph.add((MAG[class_name], RDFS.subClassOf, EDM.PhysicalThing))
 
         array = df.to_numpy(dtype=str, na_value='') # convert DataFrame to numpy ndarray for better performance
-
         commits = list()
 
-        for chunk in self._chunker(array, 1000): # commit array data in chunks to prevent reaching HTTP request size limit
-            self._mapper(chunk, store)
+        for chunk in self._chunker(array, 300): # commit array data in chunks to prevent reaching HTTP request size limit
+            self._mapper(chunk, graph)
 
             try:
                 store.open((endpoint, endpoint))
                 store.commit()
                 store.close()
                 commits.append(True)
-
-            except Exception:
+            except Exception as e:
+                print(e)
                 store.rollback()
                 commits.append(False)
 
@@ -172,7 +191,8 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
     def _mapper(self, label: str) -> dict[str, str]:
-        base_dict = {
+        return {
+            'object id': 'internalId',
             f'{label}.responsible institute': 'institute',
             f'{label}.responsible person': 'person',
             f'{label}.technique': 'technique',
@@ -181,47 +201,55 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             f'{label}.end date': 'end'
         }
 
-        return base_dict
-
     def pushDataToDb(self, path: str) -> bool:
         with open(path, 'r', encoding='utf-8') as f:
-            json_doc = load(f)
+            try:
+                json_doc = load(f)
+            except ValueError:
+                return False
 
-        df = json_normalize(json_doc).rename(columns={'object id': 'refersTo'})
+        df = json_normalize(json_doc)
+        df.drop_duplicates(subset='object id', inplace=True) # drop potential duplicated entities
+        df['refersTo'] = 'cho-' + df['object id']
+        columns = ['internalId', 'institute', 'person', 'tool', 'start', 'end', 'refersTo']
 
-        acquisition = df.iloc[:, 0:7].rename(columns=self._mapper('acquisition'))
-        processing = df.iloc[:, [0, 7, 8, 9, 10, 11]].rename(columns=self._mapper('processing'))
-        modelling = df.iloc[:, [0, 12, 13, 14, 15, 16]].rename(columns=self._mapper('modelling'))
-        optimising = df.iloc[:, [0, 17, 18, 19, 20, 21]].rename(columns=self._mapper('optimising'))
-        exporting = df.iloc[:, [0, 22, 23, 24, 25, 26]].rename(columns=self._mapper('exporting'))
+        try:
+            activities = {
+                'Acquisition': df.rename(columns=self._mapper('acquisition'))[columns + ['technique']],
+                'Processing': df.rename(columns=self._mapper('processing'))[columns],
+                'Modelling': df.rename(columns=self._mapper('modelling'))[columns],
+                'Optimising': df.rename(columns=self._mapper('optimising'))[columns],
+                'Exporting': df.rename(columns=self._mapper('exporting'))[columns],
+            }
+        except KeyError:
+            return False
 
-        activities = {
-            'Acquisition': acquisition,
-            'Processing': processing,
-            'Modelling': modelling,
-            'Optimising': optimising,
-            'Exporting': exporting
-        }
-
-        # Convert tool list to string
+        tools = DataFrame()
         for name, activity in activities.items():
-            activity['tool'] = activity['tool'].str.join(',')
+            tool = activity.pop('tool')
+            for c in activity: 
+                activity[c] = activity[c].str.strip() # trim spaces in every column
 
-        # adding tables to the database
+            activity.replace(r'', NA, inplace=True)
+            activity.dropna(subset=['institute', 'internalId'], inplace=True) # drop every entity non compliant to the data model
+            activity.internalId = name.lower() + '-' + activity.internalId
+
+            tool = concat([activity.internalId, tool], axis=1).dropna(subset=['internalId']).explode('tool')
+            tools = concat([tools, tool], axis=0, ignore_index=True)
+
+        # Add tables to the database
         database = self.getDbPathOrUrl()
         with connect(database) as con:
             for name, activity in activities.items():
                 activity.to_sql(name, con, if_exists='replace', index=False, dtype='TEXT')
+            tools.to_sql('Tool', con, if_exists='replace', index=False, dtype='TEXT')
 
-            # print for check
-            cursor = con.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = cursor.fetchall()
-            for table in tables:
-                table_name = table[0]
-                print(table_name)
-                table_df = read_sql_query(f"SELECT * FROM {table_name}", con, dtype='string')
-                print(table_df)
+            # Print for check
+            for name in activities.keys():
+                print(name)
+                print(read_sql_query(f"SELECT * FROM {name}", con, dtype='string'))
+            print('Tool')
+            print(read_sql_query(f"SELECT * FROM Tool", con, dtype='string'))
 
         return True
         
@@ -235,66 +263,35 @@ class QueryHandler(Handler):
 
 
 class MetadataQueryHandler(QueryHandler): # Francesca
-    def __init__(self):
-        self.objectQuery = """
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            PREFIX dc: <http://purl.org/dc/elements/1.1/>
-            PREFIX edm: <http://www.europeana.eu/schemas/edm/>
+    def _sort_key(self, val):
+        if val.isdigit():
+            return (0, int(val))
+        else:
+            return (1, val)
 
-            SELECT DISTINCT ?internalId ?class ?identifier ?title ?owner ?place ?date ?hasAuthor
-            WHERE {
-                    ?class rdfs:subClassOf edm:PhysicalThing .
-                    ?internalId a ?class ;
-                                dc:identifier ?identifier ;
-                                dc:title ?title ;
-                                edm:currentLocation ?owner ;
-                                dc:coverage ?place .
-
-                    OPTIONAL {?internalId dc:date ?date . }
-                    OPTIONAL {?internalId dc:creator ?hasAuthor . }
-            """
-        self.personQuery = """
-            PREFIX dc: <http://purl.org/dc/elements/1.1/>
-            PREFIX edm: <http://www.europeana.eu/schemas/edm/>
-            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
-            SELECT DISTINCT ?internalId ?identifier ?name
-            WHERE {
-                    ?internalId a edm:Agent ;
-                                dc:identifier ?identifier ;
-                                foaf:name ?name .
-            """
-
-    def to_df(self, endpoint: str, query: str) -> DataFrame:
-        sparql = SPARQLWrapper(endpoint)
-        sparql.setQuery(query)
-
-        sparql.setOnlyConneg(True)
-        sparql.setMethod(POST)
-        sparql.setRequestMethod(POSTDIRECTLY)
-        sparql.setReturnFormat(JSON)
-
-        result = sparql.query().convert()
-        meta, record = result['head']['vars'], result['results']['bindings']
-
-        return DataFrame([{key: value['value'] for key, value in entry.items()} for entry in record], columns=meta, dtype='string')
-
-    def mergeAuthors(self, endpoint: str, df: DataFrame) -> DataFrame:
-        values = ''
-        for author in df['hasAuthor'].dropna().unique():
-            values += f"""
-                    <{author}>"""
-        query = self.personQuery+f"""
-                    VALUES ?internalId {{{values}
+    def getByInternalIds(self, identifiers: list[str], entity_type: str) -> DataFrame:
+        endpoint = self.getDbPathOrUrl()
+        values_clause = f"""VALUES ?internalId {{
+                    {' '.join(f'<{MAG[identifier]}>' for identifier in identifiers)}
                     }}
-            }}
+            }} ORDER BY ?name
             """
+        if entity_type == 'person':
+            query = PERSON_QUERY + values_clause
+            df = get(endpoint, query, True).astype('string')
 
-        df = df.merge(self.to_df(endpoint, query), how='left', left_on='hasAuthor', right_on=f'internalId', suffixes=('', '_p'))
-        df.drop(columns=['internalId_p'], inplace=True)
+        elif entity_type == 'object':
+            query = OBJECT_QUERY + values_clause
+            df = get(endpoint, query, True).astype('string')
+            df['class'] = df['class'].str.replace(str(MAG), '')
+            df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
+
+        else:
+            raise ValueError("Unsupported IdentifiableEntity, must be either 'person' or 'object'")
+
+        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
-
 
     def getById(self, identifier: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
@@ -302,60 +299,58 @@ class MetadataQueryHandler(QueryHandler): # Francesca
                     VALUES ?identifier {{ "{identifier}" }}
             }}
             """
-        query = self.objectQuery + values
-        df = self.to_df(endpoint, query)
+        query = OBJECT_QUERY + values
+        df = get(endpoint, query, True).astype('string')
 
         if df.empty:
-            query = self.personQuery + values
-            df = self.to_df(endpoint, query)
+            query = PERSON_QUERY + values
+            df = get(endpoint, query, True).astype('string')
+        else:
+            df['class'] = df['class'].str.replace(str(MAG), '')
+            df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
-        elif df['hasAuthor'].notna().all():
-            df = self.mergeAuthors(endpoint, df)
-
-        df.replace({str(MAG): ''}, regex=True, inplace=True)
+        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
     def getAllPeople(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = self.personQuery+'\n            } ORDER BY ?name'
+        query = PERSON_QUERY + '\n            } ORDER BY ?name'
 
-        df = self.to_df(endpoint, query)
-        df['internalId'].replace({str(MAG): ''}, regex=True, inplace=True)
+        df = get(endpoint, query, True).astype('string')
+        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
-    def getAllCulturalHeritageObjects(self) -> DataFrame:
+    def getAllCulturalHeritageObjects(self, internalIds: list[str] | None = None) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = self.objectQuery+'\n            } ORDER BY xsd:integer(?identifier)'
+        query = OBJECT_QUERY + '\n            } ORDER BY xsd:integer(?identifier)'
 
-        df = self.to_df(endpoint, query)
-        df = self.mergeAuthors(endpoint, df)
-        print(str(MAG))
-
-        df.replace({str(MAG): ''}, regex=True, inplace=True)
+        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._sort_key), ignore_index=True)
+        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
+        df['class'] = df['class'].str.replace(str(MAG), '')
+        df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 
 
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = self.personQuery+f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n            }}'
+        query = PERSON_QUERY + f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n            }} ORDER BY ?name'
 
-        df = self.to_df(endpoint, query)
-        df['internalId'].replace({str(MAG): ''}, regex=True, inplace=True)
+        df = get(endpoint, query, True).astype('string')
+        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
     def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = self.objectQuery+f'        ?internalId dc:creator / dc:identifier "{personId}" .\n            }}'
+        query = OBJECT_QUERY + f'        ?internalId dc:creator / dc:identifier "{personId}" .\n            }} ORDER BY xsd:integer(?identifier)'
 
-        df = self.to_df(endpoint, query)
-        df = self.mergeAuthors(endpoint, df)
-
-        df.sort_values('identifier', inplace=True, ignore_index=True)
-        df.replace({str(MAG): ''}, regex=True, inplace=True)
+        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._sort_key), ignore_index=True)
+        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
+        df['class'] = df['class'].str.replace(str(MAG), '')
+        df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 

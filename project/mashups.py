@@ -1,4 +1,4 @@
-from pandas import notna
+from pandas import DataFrame, notna
 
 from data_model_classes import (
     IdentifiableEntity,
@@ -62,55 +62,86 @@ class BasicMashup:
             elif 'class' in df:
                 obj_class = eval(df['class'][0])
                 data = df.loc[0, 'identifier':'date'].dropna()
-                hasAuthor = []
-                if notna(df['hasAuthor'][0]):
-                    for identifier, name in zip(df['identifier_p'], df['name']):
-                        hasAuthor.append(Person(identifier=identifier, name=name))
+                hasAuthor = self.getAuthorsOfCulturalHeritageObject(df.identifier[0])
 
-                return obj_class(**data, hasAuthor=hasAuthor)
+                return obj_class(*data, hasAuthor=hasAuthor)
 
             else:
-                data = df.loc[0, 'identifier':'name'].dropna()
-                return Person(**data)
+                data = df.loc[0, 'identifier':'name']
+                return Person(*data)
 
         else:
             return None
 
     def getAllPeople(self) -> list[Person]: # Francesca
         result = list()
-
         for metadataQueryHandler in self.metadataQuery:
             df = metadataQueryHandler.getAllPeople()
+
             if df.empty:
                 continue
-            else:
-                result += [Person(identifier=identifier, name=name) for identifier, name in zip(df['identifier'], df['name'])]
+
+            result += [Person(*row) for row in df.iloc[:, 1:].to_numpy(dtype=object, na_value=None)]
 
         return result
 
     def getAllCulturalHeritageObjects(self) -> list[CulturalHeritageObject]: # Francesca
         result = list()
-        
         for metadataQueryHandler in self.metadataQuery:
             df = metadataQueryHandler.getAllCulturalHeritageObjects()
+
+            if df.empty:
+                continue
+
+            df = df.merge(metadataQueryHandler.getAllPeople(), how='left', left_on='hasAuthor', right_on='internalId', suffixes=('', '_p'))
+            df.drop(columns=['internalId_p'], inplace=True)
+
             obj_id = ''
             for row in df.to_numpy(dtype=object, na_value=None):
                 if obj_id != row[0]:
                     obj_id = row[0]
                     obj_class = eval(row[1])
-                    result.append(obj_class(identifier=row[2], title=row[3], owner=row[4], place=row[5], date=row[6]))
+                    result.append(obj_class(*row[2:7]))
 
                 if row[7]:
-                    author = Person(identifier=row[8], name=row[9])
-                    result[-1].hasAuthor.append(author)
+                    result[-1].hasAuthor.append(Person(*row[8:10]))
 
         return result
 
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> list[Person]: # Francesca
-        pass
+        result = list()
+        for metadataQueryHandler in self.metadataQuery:
+            df = metadataQueryHandler.getAuthorsOfCulturalHeritageObject(objectId)
+
+            if df.empty:
+                continue
+
+            result += [Person(*row) for row in df.iloc[:, 1:].to_numpy(dtype=object, na_value=None)]
+
+        return result
 
     def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> list[CulturalHeritageObject]: # Francesca
-        pass
+        result = list()
+        for metadataQueryHandler in self.metadataQuery:
+            df = metadataQueryHandler.getCulturalHeritageObjectsAuthoredBy(personId)
+
+            if df.empty:
+                continue
+            
+            df = df.merge(metadataQueryHandler.getByInternalIds(df['hasAuthor'].dropna().unique(), 'person'), how='left', left_on='hasAuthor', right_on='internalId', suffixes=('', '_p'))
+            df.drop(columns=['internalId_p'], inplace=True)
+
+            obj_id = ''
+            for row in df.to_numpy(dtype=object, na_value=None):
+                if obj_id != row[0]:
+                    obj_id = row[0]
+                    obj_class = eval(row[1])
+                    result.append(obj_class(*row[2:7]))
+
+                if row[7]:
+                    result[-1].hasAuthor.append(Person(*row[8:10]))
+
+        return result
 
     def getAllActivities(self) -> list[Activity]: # Anna
         pass

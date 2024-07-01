@@ -9,14 +9,14 @@ rel_path = 'relational.db'
 process = ProcessDataUploadHandler()
 process.setDbPathOrUrl(rel_path)
 print(process.pushDataToDb('data/process.json'))
-#print(process.pushDataToDb('data/process.json')) # test to handle multiple pushes
+print(process.pushDataToDb('data/process.json')) # test to handle multiple pushes
 
 # Create the graph database (remember first to run the Blazegraph instance)
 grp_endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'
 metadata = MetadataUploadHandler()
 print(metadata.setDbPathOrUrl(grp_endpoint))
 print(metadata.pushDataToDb('data/meta.csv'))
-print(metadata.pushDataToDb('data/meta.csv')) # test to handle multiple pushes
+#print(metadata.pushDataToDb('data/meta.csv')) # test to handle multiple pushes
 
 # Create the query handlers for both databases
 #process_qh = ProcessDataQueryHandler()
@@ -64,9 +64,9 @@ print('\nID 15\n', mashup.getEntityById('15'))
 
 print('\nID 33\n', mashup.getEntityById('33'))
 
-#print('\nAUTHORS OF 13\n', mashup.getAuthorsOfCulturalHeritageObject('13'))
+print('\nAUTHORS OF 13\n', mashup.getAuthorsOfCulturalHeritageObject('13'))
 
-#print('\nCHO BY VIAF:100190422\n', mashup.getCulturalHeritageObjectsAuthoredBy('VIAF:100190422'))
+print('\nCHO BY VIAF:100190422\n', mashup.getCulturalHeritageObjectsAuthoredBy('VIAF:100190422'))
 
 print('\nALL CHO\n', mashup.getAllCulturalHeritageObjects())
 
