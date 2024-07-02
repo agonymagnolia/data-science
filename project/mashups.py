@@ -37,21 +37,24 @@ class BasicMashup:
         self.processQuery = list()
 
     def _to_person(self, df: DataFrame) -> list[Person]:
-        return [Person(*row) for row in df.iloc[:, 1:].to_numpy(dtype=object, na_value=None)]
+        return [Person(*row) for row in df.to_numpy(dtype=object, na_value=None)]
 
     def _to_cho(self, df: DataFrame) -> list[CulturalHeritageObject]:
         result = list()
         obj_id = ''
         for row in df.to_numpy(dtype=object, na_value=None):
-            if obj_id != row[0]:
-                obj_id = row[0]
-                obj_class = eval(row[1])
-                result.append(obj_class(*row[2:7]))
+            if obj_id != row[1]:
+                obj_id = row[1]
+                obj_class = eval(row[0])
+                result.append(obj_class(*row[1:6]))
 
-            if row[7]:
-                result[-1].hasAuthor.append(Person(*row[8:10]))
+            if row[6]:
+                result[-1].hasAuthor.append(Person(*row[6:8]))
 
         return result
+
+    def _to_activity(self, df: DataFrame) -> list[Activity]: # Lin
+        pass
 
     def cleanMetadataHandlers(self) -> bool:
         self.metadataQuery = list()
@@ -131,25 +134,25 @@ class BasicMashup:
         else:
             return list()
 
-    def getAllActivities(self) -> list[Activity]: # Anna
+    def getAllActivities(self) -> list[Activity]: # Lin
         pass
 
-    def getActivitiesByResponsibleInstitution(self, partialName: str) -> list[Activity]: # Anna
+    def getActivitiesByResponsibleInstitution(self, partialName: str) -> list[Activity]: # Lin
         pass
 
-    def getActivitiesByResponsiblePerson(self, partialName: str) -> list[Activity]: # Anna
+    def getActivitiesByResponsiblePerson(self, partialName: str) -> list[Activity]: # Lin
         pass
 
-    def getActivitiesUsingTool(self, partialName: str) -> list[Activity]: # Anna
+    def getActivitiesUsingTool(self, partialName: str) -> list[Activity]: # Lin
         pass
 
-    def getActivitiesStartedAfter(self, date: str) -> list[Activity]: # Anna
+    def getActivitiesStartedAfter(self, date: str) -> list[Activity]: # Lin
         pass
 
-    def getActivitiesEndedBefore(self, date:str) -> list[Activity]: # Anna
+    def getActivitiesEndedBefore(self, date:str) -> list[Activity]: # Lin
         pass
 
-    def getAcquisitionsByTechnique(self, partialName: str) -> list[Acquisition]: # Anna
+    def getAcquisitionsByTechnique(self, partialName: str) -> list[Acquisition]: # Lin
         pass
 
 
@@ -157,7 +160,7 @@ class BasicMashup:
 
 
 
-class AdvancedMashup(BasicMashup): # Anna
+class AdvancedMashup(BasicMashup): # Lin
     def getActivitiesOnObjectsAuthoredBy(self, personId: str) -> list[Activity]:
         pass
 

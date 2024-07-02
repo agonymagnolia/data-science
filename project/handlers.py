@@ -7,7 +7,7 @@ from json import load
 from sqlite3 import connect
 
 set_option('display.max_rows', 500)
-set_option('display.max_colwidth', 21)
+set_option('display.max_colwidth', 33)
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 MAG = Namespace('https://agonymagnolia.github.io/data-science#')
@@ -17,7 +17,7 @@ OBJECT_QUERY = """
     PREFIX edm: <http://www.europeana.eu/schemas/edm/>
     PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-    SELECT DISTINCT ?internalId ?class ?identifier ?title ?owner ?place ?date ?hasAuthor ?author_identifier ?author_name
+    SELECT DISTINCT ?class ?identifier ?title ?owner ?place ?date ?hasAuthor_identifier ?hasAuthor_name
     WHERE {
             ?class rdfs:subClassOf edm:PhysicalThing .
             ?internalId a ?class ;
@@ -30,8 +30,8 @@ OBJECT_QUERY = """
             OPTIONAL {
                        ?internalId dc:creator ?hasAuthor . 
                        ?hasAuthor a edm:Agent;
-                                  dc:identifier ?author_identifier;
-                                  foaf:name ?author_name .
+                                  dc:identifier ?hasAuthor_identifier;
+                                  foaf:name ?hasAuthor_name .
                      }
     """
 PERSON_QUERY = """
@@ -39,7 +39,7 @@ PERSON_QUERY = """
     PREFIX edm: <http://www.europeana.eu/schemas/edm/>
     PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-    SELECT DISTINCT ?internalId ?identifier ?name
+    SELECT DISTINCT ?identifier ?name
     WHERE {
             ?internalId a edm:Agent ;
                         dc:identifier ?identifier ;
@@ -213,18 +213,17 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
                 return False
 
         df = json_normalize(json_doc)
-        print(df)
         df.drop_duplicates(subset='object id', inplace=True) # drop potential duplicated entities
         df['refersTo'] = df['object id']
-        columns = ['internalId', 'institute', 'person', 'tool', 'start', 'end', 'refersTo']
+        columns = ['internalId', 'refersTo', 'institute', 'person', 'start', 'end', 'tool']
 
         try:
             activities = {
-                'Acquisition': df.rename(columns=self._mapper('acquisition'))[columns + ['technique']],
+                'Acquisition': df.rename(columns=self._mapper('acquisition'))[columns[:2] + ['technique'] + columns[2:]],
                 'Processing': df.rename(columns=self._mapper('processing'))[columns],
                 'Modelling': df.rename(columns=self._mapper('modelling'))[columns],
                 'Optimising': df.rename(columns=self._mapper('optimising'))[columns],
-                'Exporting': df.rename(columns=self._mapper('exporting'))[columns],
+                'Exporting': df.rename(columns=self._mapper('exporting'))[columns]
             }
         except KeyError:
             return False
@@ -242,6 +241,7 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             tool = concat([activity.internalId, tool], axis=1) \
                   .dropna(subset=['internalId']) \
                   .explode('tool')
+            tool.tool = tool.tool.str.strip()
             tools = concat([tools, tool], axis=0, ignore_index=True)
 
         # Add tables to the database
@@ -250,13 +250,6 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             for name, activity in activities.items():
                 activity.to_sql(name, con, if_exists='replace', index=False, dtype='TEXT')
             tools.to_sql('Tool', con, if_exists='replace', index=False, dtype='TEXT')
-
-            # Print for check
-            for name in activities.keys():
-                print(name)
-                print(read_sql_query(f"SELECT * FROM {name}", con, dtype='string'))
-            print('Tool')
-            print(read_sql_query(f"SELECT * FROM Tool", con, dtype='string'))
 
         return True
         
@@ -275,16 +268,12 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
     def getByIds(self, identifiers: list[str]) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        newline = '\n                                '
         query = OBJECT_QUERY + f"""
-            VALUES ?identifier {{
-                                {newline.join(f'"{identifier}"' for identifier in identifiers)}
-                               }}
+            VALUES ?identifier {{ {' '.join(f'"{identifier}"' for identifier in identifiers)}}}
           }}
-            """
+        """
         df = get(endpoint, query, True).astype('string')
         df['class'] = df['class'].str.replace(str(MAG), '')
-        df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 
@@ -303,9 +292,6 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
         else:
             df['class'] = df['class'].str.replace(str(MAG), '')
-            df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
-
-        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
@@ -313,7 +299,6 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         endpoint = self.getDbPathOrUrl()
         query = PERSON_QUERY + '      } ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
-        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
@@ -323,9 +308,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         df = get(endpoint, query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
-        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
-        df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 
@@ -333,7 +316,6 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         endpoint = self.getDbPathOrUrl()
         query = PERSON_QUERY + f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n          }} ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
-        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
@@ -343,33 +325,34 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         df = get(endpoint, query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
-        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
-        df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 
 
 class ProcessDataQueryHandler(QueryHandler): # Anna
+    def getByIds(self, identifiers: list[str]) -> DataFrame:
+        pass
+        
     def getById(self, identifier: str) -> DataFrame:
         pass
 
     def getAllActivities(self) -> DataFrame:
         database = self.getDbPathOrUrl()
         with connect(database) as con:
-            tool = read_sql_query("SELECT * FROM Tool", con, dtype='string')
-            acquisition = read_sql_query("SELECT * FROM Acquisition", con, dtype='string')
-            processing = read_sql_query("SELECT * FROM Processing", con, dtype='string')
-            modelling = read_sql_query("SELECT * FROM Modelling", con, dtype='string')
-            optimising = read_sql_query("SELECT * FROM Optimising", con, dtype='string')
-            exporting = read_sql_query("SELECT * FROM Exporting", con, dtype='string')
-            
-        tool = tool.groupby('internalId')['tool'].apply(lambda x: set(x) if notna(x) else set())
-        acquisition = acquisition.merge(tool, how = 'left', on = 'internalId') 
-        processing = processing.merge(tool, how = 'left', on = 'internalId') 
-        modelling = modelling.merge(tool, how = 'left', on = 'internalId')
-        optimising = optimising.merge(tool, how = 'left', on = 'internalId')  
-        exporting = exporting.merge(tool, how = 'left', on = 'internalId') 
+            tool = read_sql_query("SELECT * FROM Tool", con)
+            acquisition = read_sql_query("SELECT * FROM Acquisition", con)
+            processing = read_sql_query("SELECT * FROM Processing", con)
+            modelling = read_sql_query("SELECT * FROM Modelling", con)
+            optimising = read_sql_query("SELECT * FROM Optimising", con)
+            exporting = read_sql_query("SELECT * FROM Exporting", con)
+
+        tool = tool.groupby('internalId')['tool'].apply(lambda x: set(filter(None, x)))
+        acquisition = acquisition.merge(tool, how='left', on='internalId') 
+        processing = processing.merge(tool, how='left', on='internalId') 
+        modelling = modelling.merge(tool, how='left', on='internalId')
+        optimising = optimising.merge(tool, how='left', on='internalId')  
+        exporting = exporting.merge(tool, how='left', on='internalId') 
             
         activities = [acquisition, processing, modelling, optimising, exporting]
         for activity in activities:

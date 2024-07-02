@@ -134,9 +134,9 @@ class Activity(object):
         refersTo: CulturalHeritageObject,
         institute: str,
         person: str | None = None,
-        tool: set[str] | None = None,
         start: str | None = None,
-        end: str | None = None
+        end: str | None = None,
+        tool: set[str] | None = None,
         ) -> None:
         self.institute = institute
         self.person = person
@@ -199,9 +199,9 @@ class Acquisition(Activity):
         technique: str,
         institute: str,
         person: str | None = None,
-        tool: set[str] | None = None,
         start: str | None = None,
-        end: str | None = None
+        end: str | None = None,
+        tool: set[str] | None = None,
         ) -> None:
         super().__init__(refersTo, institute, person, tool, start, end)
         self.technique = technique
