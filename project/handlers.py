@@ -1,7 +1,7 @@
 from rdflib import Graph, Namespace, URIRef, Literal
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
-from pandas import DataFrame, Series, read_csv, concat, json_normalize, read_sql_query, NA, set_option
+from pandas import DataFrame, Series, read_csv, concat, json_normalize, read_sql_query, NA, set_option, notna
 from sparql_dataframe import get
 from json import load
 from sqlite3 import connect
@@ -355,7 +355,26 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
         pass
 
     def getAllActivities(self) -> DataFrame:
-        pass
+        database = self.getDbPathOrUrl()
+        with connect(database) as con:
+            tool = read_sql_query("SELECT * FROM Tool", con, dtype='string')
+            acquisition = read_sql_query("SELECT * FROM Acquisition", con, dtype='string')
+            processing = read_sql_query("SELECT * FROM Processing", con, dtype='string')
+            modelling = read_sql_query("SELECT * FROM Modelling", con, dtype='string')
+            optimising = read_sql_query("SELECT * FROM Optimising", con, dtype='string')
+            exporting = read_sql_query("SELECT * FROM Exporting", con, dtype='string')
+            
+        tool = tool.groupby('internalId')['tool'].apply(lambda x: set(x) if notna(x) else set())
+        acquisition = acquisition.merge(tool, how = 'left', on = 'internalId') 
+        processing = processing.merge(tool, how = 'left', on = 'internalId') 
+        modelling = modelling.merge(tool, how = 'left', on = 'internalId')
+        optimising = optimising.merge(tool, how = 'left', on = 'internalId')  
+        exporting = exporting.merge(tool, how = 'left', on = 'internalId') 
+            
+        activities = [acquisition, processing, modelling, optimising, exporting]
+        for activity in activities:
+            print(activity)
+        
 
     def getActivitiesByResponsibleInstitution(self, partialName: str) -> DataFrame:
         pass

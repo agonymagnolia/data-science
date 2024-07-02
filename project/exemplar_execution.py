@@ -79,6 +79,8 @@ print('\nALL CHO\n', mashup.getAllCulturalHeritageObjects())
 
 print('\nALL PEOPLE\n', mashup.getAllPeople())
 
+process_qh.getAllActivities()
+
 
 #mashup.getAllActivities()
 #mashup.getAuthorsOfObjectsAcquiredInTimeFrame("2023-04-01", "2023-05-01")
