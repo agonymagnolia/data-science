@@ -7,6 +7,7 @@ from json import load
 from sqlite3 import connect
 
 set_option('display.max_rows', 500)
+set_option('display.max_colwidth', 21)
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 MAG = Namespace('https://agonymagnolia.github.io/data-science#')
@@ -212,8 +213,9 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
                 return False
 
         df = json_normalize(json_doc)
+        print(df)
         df.drop_duplicates(subset='object id', inplace=True) # drop potential duplicated entities
-        df['refersTo'] = 'cho-' + df['object id']
+        df['refersTo'] = df['object id']
         columns = ['internalId', 'institute', 'person', 'tool', 'start', 'end', 'refersTo']
 
         try:
@@ -237,7 +239,9 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             activity.dropna(subset=['institute', 'internalId'], inplace=True) # drop every entity non compliant to the data model
             activity.internalId = name.lower() + '-' + activity.internalId
 
-            tool = concat([activity.internalId, tool], axis=1).dropna(subset=['internalId']).explode('tool')
+            tool = concat([activity.internalId, tool], axis=1) \
+                  .dropna(subset=['internalId']) \
+                  .explode('tool')
             tools = concat([tools, tool], axis=0, ignore_index=True)
 
         # Add tables to the database
@@ -269,17 +273,16 @@ class MetadataQueryHandler(QueryHandler): # Francesca
     def _alphanumeric_sort(self, val):
         return (0, int(val)) if val.isdigit() else (1, val)
 
-    def getByInternalIds(self, identifiers: Series) -> DataFrame:
+    def getByIds(self, identifiers: list[str]) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
         newline = '\n                                '
         query = OBJECT_QUERY + f"""
-            VALUES ?internalId {{
-                                {newline.join(MAG[identifier].n3() for identifier in identifiers.dropna().unique())}
+            VALUES ?identifier {{
+                                {newline.join(f'"{identifier}"' for identifier in identifiers)}
                                }}
           }}
             """
         df = get(endpoint, query, True).astype('string')
-        df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
         df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
@@ -317,7 +320,9 @@ class MetadataQueryHandler(QueryHandler): # Francesca
     def getAllCulturalHeritageObjects(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
         query = OBJECT_QUERY + '      }'
-        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
+        df = get(endpoint, query, True) \
+            .astype('string') \
+            .sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
         df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
@@ -335,7 +340,9 @@ class MetadataQueryHandler(QueryHandler): # Francesca
     def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
         query = OBJECT_QUERY + f'\n            ?internalId dc:creator / dc:identifier "{personId}" .\n          }}'
-        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
+        df = get(endpoint, query, True) \
+            .astype('string') \
+            .sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
         df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
@@ -343,7 +350,10 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         return df
 
 
-class ProcessDataQueryHandler(QueryHandler): # Lin
+class ProcessDataQueryHandler(QueryHandler): # Anna
+    def getById(self, identifier: str) -> DataFrame:
+        pass
+
     def getAllActivities(self) -> DataFrame:
         pass
 

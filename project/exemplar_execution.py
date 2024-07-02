@@ -19,8 +19,8 @@ print(metadata.pushDataToDb('data/meta.csv'))
 print(metadata.pushDataToDb('data/meta.csv')) # test to handle multiple pushes
 
 # Create the query handlers for both databases
-#process_qh = ProcessDataQueryHandler()
-#process_qh.setDbPathOrUrl(rel_path)
+process_qh = ProcessDataQueryHandler()
+process_qh.setDbPathOrUrl(rel_path)
 
 metadata_qh = MetadataQueryHandler()
 metadata_qh.setDbPathOrUrl(grp_endpoint)
@@ -32,6 +32,7 @@ mashup.addMetadataHandler(metadata_qh)
 mashup.addMetadataHandler(metadata_qh)
 
 ###################################################################################################
+
 print('\nMETADATA QUERY HANDLER')
 
 print('\nID pippo\n', metadata_qh.getById('pippo'))
@@ -52,6 +53,11 @@ print('\nALL CHO\n', metadata_qh.getAllCulturalHeritageObjects())
 
 print('\nALL PEOPLE\n', metadata_qh.getAllPeople())
 
+###################################################################################################
+
+
+
+###################################################################################################
 
 print('\nBASIC MASHUP')
 

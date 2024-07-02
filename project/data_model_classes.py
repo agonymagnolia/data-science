@@ -121,6 +121,14 @@ class Map(CulturalHeritageObject):
 # -- Process Classes
 
 class Activity(object):
+    subclass_order = {
+        'Acquisition': 1,
+        'Processing': 2,
+        'Modelling': 3,
+        'Optimising': 4,
+        'Exporting': 5
+    }
+
     def __init__(
         self,
         refersTo: CulturalHeritageObject,
@@ -142,7 +150,24 @@ class Activity(object):
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(institute={self.institute!r}, person={self.person!r}, tool={self.tool!r}, start={self.start!r}, end={self.end!r}, refersTo={self._refersTo!r})'
+
+    def __eq__(self, other) -> bool:
+        if type(self) is type(other):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
     
+    def __lt__(self, other) -> bool:
+        if self._refersTo != other._refersTo:
+            return self._refersTo < other._refersTo
+        else:
+            self_rank = self.subclass_order[self.__class__.__name__]
+            other_rank = self.subclass_order[other.__class__.__name__]
+            return self_rank < other_rank
+
+    def __hash__(self):
+        return hash((type(self), self.institute, self.person, frozenset(self.tool), self.start, self.end, self._refersTo))
+
     def getResponsibleInstitute(self) -> str:
         return self.institute
     
@@ -174,7 +199,7 @@ class Acquisition(Activity):
         technique: str,
         institute: str,
         person: str | None = None,
-        tool: set[str] = set(),
+        tool: set[str] | None = None,
         start: str | None = None,
         end: str | None = None
         ) -> None:
@@ -183,6 +208,9 @@ class Acquisition(Activity):
 
     def __repr__(self) -> str:
         return f'Acquisition(institute={self.institute!r}, person={self.person!r}, technique={self.technique!r}, tool={self.tool!r}, start={self.start!r}, end={self.end!r}, refersTo={self._refersTo!r})'
+
+    def __hash__(self):
+        return hash((type(self), self.institute, self.person, self.technique, frozenset(self.tool), self.start, self.end, self._refersTo))
 
     def getTechnique(self) -> str:
         return self.technique
