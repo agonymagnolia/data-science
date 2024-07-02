@@ -1,11 +1,7 @@
-"""
-This module provides utilities for data processing.
-"""
-
-from rdflib import URIRef, Literal, Namespace, Graph
+from rdflib import Graph, Namespace, URIRef, Literal
 from rdflib.namespace import DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
-from pandas import DataFrame, read_csv, unique, merge, concat, notna, json_normalize, read_sql_query, NA, set_option
+from pandas import DataFrame, Series, read_csv, concat, json_normalize, read_sql_query, NA, set_option
 from sparql_dataframe import get
 from json import load
 from sqlite3 import connect
@@ -13,14 +9,14 @@ from sqlite3 import connect
 set_option('display.max_rows', 500)
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
-MAG = Namespace('https://agonymagnolia.github.io/data-science/')
+MAG = Namespace('https://agonymagnolia.github.io/data-science#')
 
 OBJECT_QUERY = """
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     PREFIX dc: <http://purl.org/dc/elements/1.1/>
     PREFIX edm: <http://www.europeana.eu/schemas/edm/>
+    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-    SELECT DISTINCT ?internalId ?class ?identifier ?title ?owner ?place ?date ?hasAuthor
+    SELECT DISTINCT ?internalId ?class ?identifier ?title ?owner ?place ?date ?hasAuthor ?author_identifier ?author_name
     WHERE {
             ?class rdfs:subClassOf edm:PhysicalThing .
             ?internalId a ?class ;
@@ -29,8 +25,13 @@ OBJECT_QUERY = """
                         edm:currentLocation ?owner ;
                         dc:coverage ?place .
 
-            OPTIONAL {?internalId dc:date ?date . }
-            OPTIONAL {?internalId dc:creator ?hasAuthor . }
+            OPTIONAL { ?internalId dc:date ?date . }
+            OPTIONAL {
+                       ?internalId dc:creator ?hasAuthor . 
+                       ?hasAuthor a edm:Agent;
+                                  dc:identifier ?author_identifier;
+                                  foaf:name ?author_name .
+                     }
     """
 PERSON_QUERY = """
     PREFIX dc: <http://purl.org/dc/elements/1.1/>
@@ -64,7 +65,7 @@ class Handler(object):
 # -- Upload Handlers
 
 class UploadHandler(Handler):
-    def pushDataToDb(self, path: str, replace: bool = False):
+    def pushDataToDb(self, path: str):
         pass
 
 
@@ -146,10 +147,12 @@ class MetadataUploadHandler(UploadHandler): # Francesca
                     graph.add((subject, DC.creator, author))
 
 
-    def pushDataToDb(self, path: str, replace: bool = False) -> bool:
+    def pushDataToDb(self, path: str) -> bool:
+        endpoint = self.getDbPathOrUrl()
+        if not endpoint:
+            return False
         store = self.store
         graph = Graph(store) # link graph to store to commit directly the graph triples to the database
-        endpoint = self.getDbPathOrUrl()
         df = read_csv(
             path,
             header=0,
@@ -263,41 +266,30 @@ class QueryHandler(Handler):
 
 
 class MetadataQueryHandler(QueryHandler): # Francesca
-    def _sort_key(self, val):
-        if val.isdigit():
-            return (0, int(val))
-        else:
-            return (1, val)
+    def _alphanumeric_sort(self, val):
+        return (0, int(val)) if val.isdigit() else (1, val)
 
-    def getByInternalIds(self, identifiers: list[str], entity_type: str) -> DataFrame:
+    def getByInternalIds(self, identifiers: Series) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        values_clause = f"""VALUES ?internalId {{
-                    {' '.join(f'<{MAG[identifier]}>' for identifier in identifiers)}
-                    }}
-            }} ORDER BY ?name
+        newline = '\n                                '
+        query = OBJECT_QUERY + f"""
+            VALUES ?internalId {{
+                                {newline.join(MAG[identifier].n3() for identifier in identifiers.dropna().unique())}
+                               }}
+          }}
             """
-        if entity_type == 'person':
-            query = PERSON_QUERY + values_clause
-            df = get(endpoint, query, True).astype('string')
-
-        elif entity_type == 'object':
-            query = OBJECT_QUERY + values_clause
-            df = get(endpoint, query, True).astype('string')
-            df['class'] = df['class'].str.replace(str(MAG), '')
-            df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
-
-        else:
-            raise ValueError("Unsupported IdentifiableEntity, must be either 'person' or 'object'")
-
+        df = get(endpoint, query, True).astype('string')
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
+        df['class'] = df['class'].str.replace(str(MAG), '')
+        df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 
     def getById(self, identifier: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
         values = f"""
-                    VALUES ?identifier {{ "{identifier}" }}
-            }}
+            VALUES ?identifier {{ "{identifier}" }}
+          }}
             """
         query = OBJECT_QUERY + values
         df = get(endpoint, query, True).astype('string')
@@ -305,6 +297,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         if df.empty:
             query = PERSON_QUERY + values
             df = get(endpoint, query, True).astype('string')
+
         else:
             df['class'] = df['class'].str.replace(str(MAG), '')
             df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
@@ -315,29 +308,25 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
     def getAllPeople(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = PERSON_QUERY + '\n            } ORDER BY ?name'
-
+        query = PERSON_QUERY + '      } ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
         return df
 
-    def getAllCulturalHeritageObjects(self, internalIds: list[str] | None = None) -> DataFrame:
+    def getAllCulturalHeritageObjects(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = OBJECT_QUERY + '\n            } ORDER BY xsd:integer(?identifier)'
-
-        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._sort_key), ignore_index=True)
+        query = OBJECT_QUERY + '      }'
+        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
         df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')
 
         return df
 
-
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = PERSON_QUERY + f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n            }} ORDER BY ?name'
-
+        query = PERSON_QUERY + f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n          }} ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
 
@@ -345,9 +334,8 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
     def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = OBJECT_QUERY + f'        ?internalId dc:creator / dc:identifier "{personId}" .\n            }} ORDER BY xsd:integer(?identifier)'
-
-        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._sort_key), ignore_index=True)
+        query = OBJECT_QUERY + f'\n            ?internalId dc:creator / dc:identifier "{personId}" .\n          }}'
+        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
         df['internalId'] = df['internalId'].str.replace(str(MAG), '')
         df['class'] = df['class'].str.replace(str(MAG), '')
         df['hasAuthor'] = df['hasAuthor'].str.replace(str(MAG), '')

@@ -16,7 +16,7 @@ grp_endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'
 metadata = MetadataUploadHandler()
 print(metadata.setDbPathOrUrl(grp_endpoint))
 print(metadata.pushDataToDb('data/meta.csv'))
-#print(metadata.pushDataToDb('data/meta.csv')) # test to handle multiple pushes
+print(metadata.pushDataToDb('data/meta.csv')) # test to handle multiple pushes
 
 # Create the query handlers for both databases
 #process_qh = ProcessDataQueryHandler()
@@ -28,6 +28,7 @@ metadata_qh.setDbPathOrUrl(grp_endpoint)
 # Create a advanced mashup object for queries
 mashup = AdvancedMashup()
 #mashup.addProcessHandler(process_qh)
+mashup.addMetadataHandler(metadata_qh)
 mashup.addMetadataHandler(metadata_qh)
 
 ###################################################################################################

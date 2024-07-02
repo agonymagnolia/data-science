@@ -3,6 +3,12 @@
 class IdentifiableEntity(object):
     def __init__(self, identifier: str) -> None:
         self.identifier = identifier
+
+    def __eq__(self, other) -> bool:
+        if type(self) is type(other):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
     
     def getId(self) -> str:
         return self.identifier
@@ -15,6 +21,12 @@ class Person(IdentifiableEntity):
 
     def __repr__(self) -> str:
         return f'Person(id={self.identifier!r}, name={self.name!r})'
+
+    def __lt__(self, other) -> bool:
+        return self.name < other.name
+
+    def __hash__(self):
+        return hash((type(self), self.identifier, self.name))
 
     def getName(self) -> str:
         return self.name
@@ -41,6 +53,14 @@ class CulturalHeritageObject(IdentifiableEntity):
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(id={self.identifier!r}, title={self.title!r}, owner={self.owner!r}, place={self.place!r}, date={self.date!r}, hasAuthor={self.hasAuthor!r})'
+
+    def __lt__(self, other) -> bool:
+        val1 = (0, int(self.identifier)) if self.identifier.isdigit() else (1, self.identifier)
+        val2 = (0, int(other.identifier)) if other.identifier.isdigit() else (1, other.identifier)
+        return val1 < val2
+
+    def __hash__(self):
+        return hash((type(self), self.identifier, self.title, self.owner, self.place, self.date, tuple(self.hasAuthor)))
 
     def getTitle(self) -> str:
         return self.title
