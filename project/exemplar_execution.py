@@ -34,8 +34,6 @@ mashup = AdvancedMashup()
 mashup.addMetadataHandler(metadata_qh)
 mashup.addMetadataHandler(metadata_qh)
 
-###################################################################################################
-
 print('\n********************************* METADATA QUERY HANDLER *********************************')
 
 print('\nID pippo\n', metadata_qh.getById('pippo'))
@@ -55,8 +53,6 @@ print('\nCHO BY VIAF:100190422\n', metadata_qh.getCulturalHeritageObjectsAuthore
 print('\nALL CHO\n', metadata_qh.getAllCulturalHeritageObjects())
 
 print('\nALL PEOPLE\n', metadata_qh.getAllPeople())
-
-###################################################################################################
 
 print('\n******************************* PROCESS DATA QUERY HANDLER *******************************')
 
@@ -87,8 +83,6 @@ print('\nA AFTER 23rd October 23\n', process_qh.getActivitiesStartedAfter('2023-
 print('\nA BEFORE Today\n', process_qh.getActivitiesEndedBefore('2024-07-02'))
 
 print('\nACQ BY TECHNIQUE scanner\n', process_qh.getAcquisitionsByTechnique('light'))
-
-###################################################################################################
 
 print('\n************************************** BASIC MASHUP **************************************')
 
@@ -123,8 +117,6 @@ print('\nA AFTER 23rd October 23\n', mashup.getActivitiesStartedAfter('2023-10-2
 print('\nA BEFORE Today\n', mashup.getActivitiesEndedBefore('2024-07-02'))
 
 print('\nACQ BY TECHNIQUE Scanner\n', mashup.getAcquisitionsByTechnique('light'))
-
-###################################################################################################
 
 print('\n************************************* ADVANCED MASHUP *************************************')
 
