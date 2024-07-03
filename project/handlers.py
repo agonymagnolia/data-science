@@ -1,10 +1,22 @@
-from rdflib import Graph, Namespace, URIRef, Literal
-from rdflib.namespace import DC, FOAF, RDF, RDFS
+from rdflib.graph import Graph
+from rdflib.term import URIRef, Literal
+from rdflib.namespace import Namespace, DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
-from pandas import DataFrame, Series, read_csv, concat, json_normalize, read_sql_query, NA, set_option, notna
+from urllib.error import URLError
+from pandas import (
+    DataFrame,
+    Series,
+    read_csv,
+    concat,
+    json_normalize,
+    read_sql_query,
+    NA,
+    notna,
+    set_option
+)
 from sparql_dataframe import get
 from json import load
-from sqlite3 import connect
+from sqlite3 import connect, Error
 
 set_option('display.max_rows', 500)
 set_option('display.max_colwidth', 33)
@@ -17,7 +29,8 @@ OBJECT_QUERY = """
     PREFIX edm: <http://www.europeana.eu/schemas/edm/>
     PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-    SELECT DISTINCT ?class ?identifier ?title ?owner ?place ?date ?hasAuthor_identifier ?hasAuthor_name
+    SELECT DISTINCT ?class ?identifier ?title ?owner ?place ?date \
+    ?hasAuthor_identifier ?hasAuthor_name
     WHERE {
             ?class rdfs:subClassOf edm:PhysicalThing .
             ?internalId a ?class ;
@@ -43,8 +56,23 @@ PERSON_QUERY = """
     WHERE {
             ?internalId a edm:Agent ;
                         dc:identifier ?identifier ;
-                        foaf:name ?name .
+                        foaf:name ?name ;
     """
+
+def alphanumeric_sort(val):
+    """
+    Provides a custom sorting key for alphanumeric string identifiers.
+    For numeric values returns a tuple (0, int(val)).
+    For non-numeric values returns a tuple (1, val).
+
+    In this way, integers always precede strings, avoiding direct comparison.
+    Integers and strings are then compared separately within each group
+    (numbers with numbers and letters with letters).
+    """
+    if val.isdigit():
+        return (0, int(val))
+    else:
+        return (1, val)
 
 # -----------------------------------------------------------------------------
 
@@ -66,17 +94,14 @@ class Handler(object):
 # -- Upload Handlers
 
 class UploadHandler(Handler):
-    def pushDataToDb(self, path: str):
-        pass
+    def pushDataToDb(self, path: str) -> bool:
+        return self.getDbPathOrUrl() and path and isinstance (path, str)
 
 
 class MetadataUploadHandler(UploadHandler): # Francesca
-    def __init__(self) -> None:
-        super().__init__()
-        self.store = SPARQLUpdateStore(autocommit=False, context_aware=False, dirty_reads=True) # ! database connection only on commit
-        self.store.setTimeout(60)
-        self.store.method = 'POST'
-        self.classDict = {
+    # Dictionary to map csv values to data model classes is set as a class
+    # variable (shared among all the instances of MetadataUploadHandler)
+    csv_values = {
             'Nautical chart': 'NauticalChart',
             'Manuscript plate': 'ManuscriptPlate',
             'Manuscript volume': 'ManuscriptVolume',
@@ -88,27 +113,40 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             'Model': 'Model',
             'Map': 'Map'
         }
-        self.entities: set[URIRef] = set() # set of entities
+
+    def __init__(self) -> None:
+        # The store configuration is initialised as an instance variable,
+        # each MetadataUploadHandler instance has its own store
+        super().__init__()
+
+        # ! Database connection only on commit !
+        self.store = SPARQLUpdateStore(autocommit=False, context_aware=False)
+        self.store.setTimeout(60)
+        self.store.method = 'POST'
+        self.entities: set[URIRef] = set() # Set of entities inside the database
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
         if not super().setDbPathOrUrl(newDbPathOrUrl):
             return False
 
-        store = self.store
         endpoint = self.getDbPathOrUrl()
+        store = self.store
 
         try:
             store.open((endpoint, endpoint))
             self.entities.update(store.subjects(predicate=RDF.type))
             store.close()
             return True
-        except Exception:
+
+        except URLError as e:
+            print(e)
             return False
 
     def _chunker(self, array: 'numpy.ndarray', size: int) -> 'Generator':
-        return (array[pos:pos + size] for pos in range(0, len(array), size)) # size is the step of the range
+        # Size is the step of the range
+        return (array[pos:pos + size] for pos in range(0, len(array), size))
 
-    def _mapper(self, array: 'numpy.ndarray', graph: Graph) -> None:
+    def _to_rdf(self, array: 'numpy.ndarray', graph: Graph) -> None:
         for row in array:
             subject = MAG['cho-' + row[0]]
 
@@ -149,43 +187,68 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
     def pushDataToDb(self, path: str) -> bool:
-        endpoint = self.getDbPathOrUrl()
-        if not endpoint:
+        if not super().pushDataToDb(path):
             return False
+
+        endpoint = self.getDbPathOrUrl()
         store = self.store
-        graph = Graph(store) # link graph to store to commit directly the graph triples to the database
+        # Link graph to store to commit directly the triples to the database
+        graph = Graph(store)
+
         df = read_csv(
             path,
             header=0,
-            names=['identifier', 'className', 'title', 'date', 'hasAuthor', 'owner', 'place'],
+            names=[
+                'identifier',
+                'className',
+                'title',
+                'date',
+                'hasAuthor',
+                'owner',
+                'place'
+            ],
             dtype='string',
             on_bad_lines='skip',
             engine='c',
             memory_map=True,
-            )
+        )
 
-        for c in df: 
-            df[c] = df[c].str.strip() # trim spaces in every column
+        for col in df: 
+            df[col] = df[col].str.strip() # trim spaces in every column
 
-        df.className = df.className.map(self.classDict) # change corresponding entries based on dictionary, others are turned to NaN
-        df.dropna(subset=['identifier', 'className', 'title', 'owner', 'place'], inplace=True) # drop every entity non compliant to the data model
-        df.drop_duplicates(subset='identifier', inplace=True) # drop potential duplicated entities
+        # Change corresponding entries based on dictionary, others are
+        # turned to NaN
+        df.className = df.className.map(self.csv_values)
+
+        # Drop every entity non compliant to the data model
+        df.dropna(subset=[
+            'identifier',
+            'className',
+            'title',
+            'owner',
+            'place'
+        ], inplace=True)
+
+        # Drop potential duplicated entities
+        df.drop_duplicates(subset='identifier', inplace=True)
 
         for class_name in df.className.unique():
             graph.add((MAG[class_name], RDFS.subClassOf, EDM.PhysicalThing))
 
-        array = df.to_numpy(dtype=str, na_value='') # convert DataFrame to numpy ndarray for better performance
-        commits = list()
+        # Convert DataFrame to numpy ndarray for better performance
+        array = df.to_numpy(dtype=str, na_value='')
 
-        for chunk in self._chunker(array, 300): # commit array data in chunks to prevent reaching HTTP request size limit
-            self._mapper(chunk, graph)
+        # Commit array data in chunks to prevent reaching HTTP request size limit
+        commits = list()
+        for chunk in self._chunker(array, 300):
+            self._to_rdf(chunk, graph)
 
             try:
                 store.open((endpoint, endpoint))
                 store.commit()
                 store.close()
                 commits.append(True)
-            except Exception as e:
+            except URLError as e:
                 print(e)
                 store.rollback()
                 commits.append(False)
@@ -194,55 +257,106 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
-    def _mapper(self, label: str) -> dict[str, str]:
+    def _mapper(self, activity: str) -> dict[str, str]:
         return {
             'object id': 'internalId',
-            f'{label}.responsible institute': 'institute',
-            f'{label}.responsible person': 'person',
-            f'{label}.technique': 'technique',
-            f'{label}.tool': 'tool',
-            f'{label}.start date': 'start',
-            f'{label}.end date': 'end'
+            f'{activity}.responsible institute': 'institute',
+            f'{activity}.responsible person': 'person',
+            f'{activity}.technique': 'technique',
+            f'{activity}.tool': 'tool',
+            f'{activity}.start date': 'start',
+            f'{activity}.end date': 'end'
         }
 
+    def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
+        if not super().setDbPathOrUrl(newDbPathOrUrl):
+            return False
+        try:
+            conn = connect(self.getDbPathOrUrl())
+            conn.close()
+            return True
+        except Error as e:
+            print(e)
+            return False
+
     def pushDataToDb(self, path: str) -> bool:
+        if not super().pushDataToDb(path):
+            return False
+
         with open(path, 'r', encoding='utf-8') as f:
             try:
                 json_doc = load(f)
             except ValueError:
                 return False
 
+        # Flatten the json file in one DataFrame
         df = json_normalize(json_doc)
-        df.drop_duplicates(subset='object id', inplace=True) # drop potential duplicated entities
-        df['refersTo'] = df['object id']
-        columns = ['internalId', 'refersTo', 'institute', 'person', 'start', 'end', 'tool']
 
+        # Drop potential duplicated entities
+        df.drop_duplicates(subset='object id', inplace=True)
+
+        # Duplicate the object id column to represent the refersTo relation
+        df['refersTo'] = df['object id']
+
+        # Rename columns for each activity, select the relevant columns and
+        # store each DataFrame in a dictionary to access easily their names
+        # while iterating over them
+        columns = [
+            'internalId',
+            'refersTo',
+            'institute',
+            'person',
+            'start',
+            'end',
+            'tool'
+        ]
         try:
             activities = {
-                'Acquisition': df.rename(columns=self._mapper('acquisition'))[columns[:2] + ['technique'] + columns[2:]],
-                'Processing': df.rename(columns=self._mapper('processing'))[columns],
-                'Modelling': df.rename(columns=self._mapper('modelling'))[columns],
-                'Optimising': df.rename(columns=self._mapper('optimising'))[columns],
-                'Exporting': df.rename(columns=self._mapper('exporting'))[columns]
+                'Acquisition':
+                    df.rename(columns=self._mapper('acquisition'))[
+                    columns[:2] + ['technique'] + columns[2:]
+                    ], # Add technique column in the right position
+                'Processing':
+                    df.rename(columns=self._mapper('processing'))[columns],
+                'Modelling':
+                    df.rename(columns=self._mapper('modelling'))[columns],
+                'Optimising':
+                    df.rename(columns=self._mapper('optimising'))[columns],
+                'Exporting':
+                    df.rename(columns=self._mapper('exporting'))[columns]
             }
         except KeyError:
             return False
 
+        # Initialize an empty DataFrame to store tool information
         tools = DataFrame()
-        for name, activity in activities.items():
-            tool = activity.pop('tool')
-            for c in activity: 
-                activity[c] = activity[c].str.strip() # trim spaces in every column
 
+        for name, activity in activities.items():
+            # Extract tool column from each activity DataFrame
+            tool = activity.pop('tool')
+
+            # Trim spaces in every column
+            for col in activity:
+                activity[col] = activity[col].str.strip()
+
+            # Drop every entity non compliant to the data model
             activity.replace(r'', NA, inplace=True)
-            activity.dropna(subset=['institute', 'internalId'], inplace=True) # drop every entity non compliant to the data model
+            activity.dropna(subset=['institute', 'internalId'], inplace=True)
+
+            # Add activity prefix to the internalId
             activity.internalId = name.lower() + '-' + activity.internalId
 
-            tool = concat([activity.internalId, tool], axis=1) \
+            # Create a tool_df combining internalId and tool columns,
+            # drop rows where internalId is not defined and split each list
+            # in the tool column into a separate row, while duplicating the
+            # internalId values for each expandend row (explode method)
+            tool_df = concat([activity.internalId, tool], axis=1) \
                   .dropna(subset=['internalId']) \
                   .explode('tool')
-            tool.tool = tool.tool.str.strip()
-            tools = concat([tools, tool], axis=0, ignore_index=True)
+            tool_df.tool = tool_df.tool.str.strip()
+
+            # Concatenate tool_df with tools DataFrame to accumulate results
+            tools = concat([tools, tool_df], axis=0, ignore_index=True)
 
         # Add tables to the database
         database = self.getDbPathOrUrl()
@@ -258,38 +372,39 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
 # -- Query Handlers
 
 class QueryHandler(Handler):
-    def getById(self, identifier: str):
-        pass
+    def getById(self, identifiers: str | list[str]):
+        # Convert identifiers to a list if it is a single string
+        if isinstance(identifiers, str):
+            return [identifiers]
+        else:
+            return identifiers
 
 
 class MetadataQueryHandler(QueryHandler): # Francesca
-    def _alphanumeric_sort(self, val):
-        return (0, int(val)) if val.isdigit() else (1, val)
+    def getById(self, identifiers: str | list[str]) -> DataFrame:
+        # Normalize identifiers to a list
+        identifiers = super().getById(identifiers)
 
-    def getByIds(self, identifiers: list[str]) -> DataFrame:
-        endpoint = self.getDbPathOrUrl()
-        query = OBJECT_QUERY + f"""
-            VALUES ?identifier {{ {' '.join(f'"{identifier}"' for identifier in identifiers)}}}
+        # Construct VALUES clause for SPARQL query, specifying identifiers
+        # as parameters
+        value_clause = f"""
+            VALUES ?identifier {{ {' '.join(f'"{identifier}"' for identifier in identifiers)} }}
           }}
         """
-        df = get(endpoint, query, True).astype('string')
-        df['class'] = df['class'].str.replace(str(MAG), '')
-
-        return df
-
-    def getById(self, identifier: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        values = f"""
-            VALUES ?identifier {{ "{identifier}" }}
-          }}
-            """
-        query = OBJECT_QUERY + values
+
+        # First try to look for cultural heritage objects
+        query = OBJECT_QUERY + value_clause
         df = get(endpoint, query, True).astype('string')
 
+        # If the object query found nothing, retry looking for people with
+        # the same value clause
         if df.empty:
-            query = PERSON_QUERY + values
+            query = PERSON_QUERY + value_clause
             df = get(endpoint, query, True).astype('string')
 
+        # If the object query was successful, remove personal namespace URL
+        # from class entities
         else:
             df['class'] = df['class'].str.replace(str(MAG), '')
 
@@ -305,37 +420,48 @@ class MetadataQueryHandler(QueryHandler): # Francesca
     def getAllCulturalHeritageObjects(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
         query = OBJECT_QUERY + '      }'
+        # Sort the DataFrame by identifier using an alphanumeric sort key
         df = get(endpoint, query, True) \
             .astype('string') \
-            .sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
+            .sort_values(by='identifier', key=lambda x: x.map(alphanumeric_sort), ignore_index=True)
         df['class'] = df['class'].str.replace(str(MAG), '')
 
         return df
 
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = PERSON_QUERY + f'        ?internalId ^dc:creator / dc:identifier "{objectId}" .\n          }} ORDER BY ?name'
+        # The ^ symbol in SPARQL reverses the subject and object of the triple
+        # pattern, concisely allowing the subject of the previous triples to
+        # be used as the object of the current triple. In this case, this
+        # chained triple pattern means that the person identified by
+        # ?internalId is the creator (object of dc:creator predicate) of an
+        # implicit cultural heritage object with identifier 'objectId'.
+        query = PERSON_QUERY + f'                   ^dc:creator / dc:identifier "{objectId}" .\n          }} ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
 
         return df
 
     def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
+        # The / symbol in SPARQL allows for an implicit unnamed node that is
+        # the object of the first triple pattern and the subject of the
+        # second, which in this case is an author with a certain 'personId'.
+        # Because 'personId' was not linked to ?hasAuthor, the query retrieves
+        # all the authors associated with the cultural heritage object,
+        # regardless of which specific author was used to select that object.
         query = OBJECT_QUERY + f'\n            ?internalId dc:creator / dc:identifier "{personId}" .\n          }}'
         df = get(endpoint, query, True) \
             .astype('string') \
-            .sort_values(by='identifier', key=lambda x: x.map(self._alphanumeric_sort), ignore_index=True)
+            .sort_values(by='identifier', key=lambda x: x.map(alphanumeric_sort), ignore_index=True)
         df['class'] = df['class'].str.replace(str(MAG), '')
 
         return df
 
 
 class ProcessDataQueryHandler(QueryHandler): # Anna
-    def getByIds(self, identifiers: list[str]) -> DataFrame:
-        pass
-        
-    def getById(self, identifier: str) -> DataFrame:
-        pass
+    def getById(self, identifiers: str | list[str]) -> DataFrame:
+        # Normalize identifiers to a list
+        identifiers = super().getById(identifiers)
 
     def getAllActivities(self) -> DataFrame:
         database = self.getDbPathOrUrl()

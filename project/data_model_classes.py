@@ -52,15 +52,41 @@ class CulturalHeritageObject(IdentifiableEntity):
         self.hasAuthor = list() if hasAuthor is None else hasAuthor
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(id={self.identifier!r}, title={self.title!r}, owner={self.owner!r}, place={self.place!r}, date={self.date!r}, hasAuthor={self.hasAuthor!r})'
+        return (
+            f'{self.__class__.__name__}('
+            f'id={self.identifier!r}, '
+            f'title={self.title!r}, '
+            f'owner={self.owner!r}, '
+            f'place={self.place!r}, '
+            f'date={self.date!r}, '
+            f'hasAuthor={self.hasAuthor!r})'
+        )
 
     def __lt__(self, other) -> bool:
-        val1 = (0, int(self.identifier)) if self.identifier.isdigit() else (1, self.identifier)
-        val2 = (0, int(other.identifier)) if other.identifier.isdigit() else (1, other.identifier)
+        # Numeric and alphabetic identifiers are placed respecitvely
+        # in a 0 tuple and in a 1 tuple to allow for comparison
+        if self.identifier.isdigit():
+            val1 = (0, int(self.identifier))
+        else:
+            val1 = (1, self.identifier)
+
+        if other.identifier.isdigit():
+            val2 = (0, int(other.identifier))
+        else:
+            val2 = (1, other.identifier)
+
         return val1 < val2
 
     def __hash__(self):
-        return hash((type(self), self.identifier, self.title, self.owner, self.place, self.date, tuple(self.hasAuthor)))
+        return hash((
+            type(self),
+            self.identifier,
+            self.title,
+            self.owner,
+            self.place,
+            self.date,
+            tuple(self.hasAuthor)
+        ))
 
     def getTitle(self) -> str:
         return self.title
@@ -137,10 +163,11 @@ class Activity(object):
         start: str | None = None,
         end: str | None = None,
         tool: set[str] | None = None,
-        ) -> None:
+    ) -> None:
         self.institute = institute
         self.person = person
-        # Same as the hasAuthor list
+        # Setting the default value directly as empty set would
+        # share the same set among all the instances of the class
         self.tool = set() if tool is None else tool
         self.start = start
         self.end = end
@@ -149,7 +176,15 @@ class Activity(object):
         self._refersTo = refersTo
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(institute={self.institute!r}, person={self.person!r}, tool={self.tool!r}, start={self.start!r}, end={self.end!r}, refersTo={self._refersTo!r})'
+        return (
+            f'{self.__class__.__name__}('
+            f'institute={self.institute!r}, '
+            f'person={self.person!r}, '
+            f'tool={self.tool!r}, '
+            f'start={self.start!r}, '
+            f'end={self.end!r}, '
+            f'refersTo={self._refersTo!r})'
+        )
 
     def __eq__(self, other) -> bool:
         if type(self) is type(other):
@@ -166,7 +201,15 @@ class Activity(object):
             return self_rank < other_rank
 
     def __hash__(self):
-        return hash((type(self), self.institute, self.person, frozenset(self.tool), self.start, self.end, self._refersTo))
+        return hash((
+            type(self),
+            self.institute,
+            self.person,
+            frozenset(self.tool),
+            self.start,
+            self.end,
+            self._refersTo
+        ))
 
     def getResponsibleInstitute(self) -> str:
         return self.institute
@@ -203,14 +246,32 @@ class Acquisition(Activity):
         end: str | None = None,
         tool: set[str] | None = None,
         ) -> None:
-        super().__init__(refersTo, institute, person, tool, start, end)
+        super().__init__(refersTo, institute, person, start, end, tool)
         self.technique = technique
 
     def __repr__(self) -> str:
-        return f'Acquisition(institute={self.institute!r}, person={self.person!r}, technique={self.technique!r}, tool={self.tool!r}, start={self.start!r}, end={self.end!r}, refersTo={self._refersTo!r})'
+        return (
+            f'Acquisition('
+            f'institute={self.institute!r}, '
+            f'person={self.person!r}, '
+            f'technique={self.technique!r}, '
+            f'tool={self.tool!r}, '
+            f'start={self.start!r}, '
+            f'end={self.end!r}, '
+            f'refersTo={self._refersTo!r})'
+        )
 
     def __hash__(self):
-        return hash((type(self), self.institute, self.person, self.technique, frozenset(self.tool), self.start, self.end, self._refersTo))
+        return hash((
+            type(self),
+            self.institute,
+            self.person,
+            self.technique,
+            frozenset(self.tool),
+            self.start,
+            self.end,
+            self._refersTo
+        ))
 
     def getTechnique(self) -> str:
         return self.technique

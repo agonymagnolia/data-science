@@ -37,17 +37,32 @@ class BasicMashup:
         self.processQuery = list()
 
     def _to_person(self, df: DataFrame) -> list[Person]:
+        # Unpack values from the row and feed them to the class cosntructor
         return [Person(*row) for row in df.to_numpy(dtype=object, na_value=None)]
 
     def _to_cho(self, df: DataFrame) -> list[CulturalHeritageObject]:
         result = list()
+
+        # Variable to track the current object identifier
         obj_id = ''
+
+        # Unpack values from each row and feed them to the class constructor.
+        # NaN values are turned to None and handled accordingly by the class
+        # __init__. Attribute hasAuthor is aways initialised as an empty list
+        # and populated after the object creation.
         for row in df.to_numpy(dtype=object, na_value=None):
+            # If the identifier is the same of the previous row, do not
+            # recreate the object but only append the author to the hasAuthor
+            # list of the last created object
             if obj_id != row[1]:
                 obj_id = row[1]
-                obj_class = eval(row[0])
-                result.append(obj_class(*row[1:6]))
 
+                # Retrieve the constructor of the class from its name
+                obj_class = eval(row[0])
+
+                # Create a new object and append it to the result list
+                result.append(obj_class(*row[1:6]))
+            
             if row[6]:
                 result[-1].hasAuthor.append(Person(*row[6:8]))
 
@@ -73,12 +88,15 @@ class BasicMashup:
         return True
 
     def getEntityById(self, identifier: str) -> IdentifiableEntity | None: # Francesca
+        # For search queries the iteration on the handler instances stops
+        # at the first result found, while in the getAll methods the results
+        # are aggregated
         for handler in self.metadataQuery:
             df = handler.getById(identifier)
 
             if df.empty:
                 continue
-            elif 'class' in df:
+            elif 'class' in df: # The result is an object
                 return self._to_cho(df)[0]
             else:
                 return self._to_person(df)[0]
@@ -95,8 +113,12 @@ class BasicMashup:
                 continue
             else:
                 result += self._to_person(df)
+
         # Manage duplicate and/or unordered metadata query handlers
-        return sorted(list(set(result))) if len(self.metadataQuery) > 1 else result
+        if len(self.metadataQuery) > 1:
+            return sorted(list(set(result)))
+        else:
+            return result
 
     def getAllCulturalHeritageObjects(self) -> list[CulturalHeritageObject]: # Francesca
         result = list()
@@ -108,7 +130,11 @@ class BasicMashup:
             else:
                 result += self._to_cho(df)
 
-        return sorted(list(set(result))) if len(self.metadataQuery) > 1 else result
+        # Manage duplicate and/or unordered metadata query handlers
+        if len(self.metadataQuery) > 1:
+            return sorted(list(set(result)))
+        else:
+            return result
 
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> list[Person]: # Francesca
         for handler in self.metadataQuery:
