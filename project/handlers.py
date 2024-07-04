@@ -29,23 +29,21 @@ OBJECT_QUERY = """
     PREFIX edm: <http://www.europeana.eu/schemas/edm/>
     PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-    SELECT DISTINCT ?class ?identifier ?title ?owner ?place ?date \
-    ?hasAuthor_identifier ?hasAuthor_name
+    SELECT DISTINCT ?class ?identifier ?title ?owner ?place ?date ?hasAuthor_identifier ?hasAuthor_name
     WHERE {
-            ?class rdfs:subClassOf edm:PhysicalThing .
-            ?internalId a ?class ;
-                        dc:identifier ?identifier ;
-                        dc:title ?title ;
-                        edm:currentLocation ?owner ;
-                        dc:coverage ?place .
+        ?class rdfs:subClassOf edm:PhysicalThing .
+        ?internalId a ?class ;
+                    dc:identifier ?identifier ;
+                    dc:title ?title ;
+                    edm:currentLocation ?owner ;
+                    dc:coverage ?place .
 
-            OPTIONAL { ?internalId dc:date ?date . }
-            OPTIONAL {
-                       ?internalId dc:creator ?hasAuthor . 
-                       ?hasAuthor a edm:Agent;
-                                  dc:identifier ?hasAuthor_identifier;
-                                  foaf:name ?hasAuthor_name .
-                     }
+        OPTIONAL { ?internalId dc:date ?date . }
+        OPTIONAL {
+            ?hasAuthor ^dc:creator ?internalId ;
+                        dc:identifier ?hasAuthor_identifier ;
+                        foaf:name ?hasAuthor_name .
+        }
     """
 PERSON_QUERY = """
     PREFIX dc: <http://purl.org/dc/elements/1.1/>
@@ -54,10 +52,13 @@ PERSON_QUERY = """
 
     SELECT DISTINCT ?identifier ?name
     WHERE {
-            ?internalId a edm:Agent ;
-                        dc:identifier ?identifier ;
-                        foaf:name ?name ;
+        ?internalId a edm:Agent ;
+                    dc:identifier ?identifier ;
+                    foaf:name ?name ;
     """
+ACTIVITIES = ['acquisition', 'processing', 'modelling', 'optimising', 'exporting']
+ACTIVITY_COLUMNS = ['internalId', 'refersTo', 'institute', 'person', 'start', 'end', 'tool']
+ACQUISITION_COLUMNS = ['internalId', 'refersTo', 'technique', 'institute', 'person', 'start', 'end', 'tool']
 
 def alphanumeric_sort(val):
     """
@@ -101,7 +102,7 @@ class UploadHandler(Handler):
 class MetadataUploadHandler(UploadHandler): # Francesca
     # Dictionary to map csv values to data model classes is set as a class
     # variable (shared among all the instances of MetadataUploadHandler)
-    csv_values = {
+    _csv_map = {
             'Nautical chart': 'NauticalChart',
             'Manuscript plate': 'ManuscriptPlate',
             'Manuscript volume': 'ManuscriptVolume',
@@ -218,7 +219,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
         # Change corresponding entries based on dictionary, others are
         # turned to NaN
-        df.className = df.className.map(self.csv_values)
+        df.className = df.className.map(self._csv_map)
 
         # Drop every entity non compliant to the data model
         df.dropna(subset=[
@@ -257,7 +258,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
-    def _mapper(self, activity: str) -> dict[str, str]:
+    def _json_map(self, activity: str) -> dict[str, str]:
         return {
             'object id': 'internalId',
             f'{activity}.responsible institute': 'institute',
@@ -272,8 +273,8 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         if not super().setDbPathOrUrl(newDbPathOrUrl):
             return False
         try:
-            conn = connect(self.getDbPathOrUrl())
-            conn.close()
+            con = connect(self.getDbPathOrUrl())
+            con.close()
             return True
         except Error as e:
             print(e)
@@ -301,31 +302,15 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         # Rename columns for each activity, select the relevant columns and
         # store each DataFrame in a dictionary to access easily their names
         # while iterating over them
-        columns = [
-            'internalId',
-            'refersTo',
-            'institute',
-            'person',
-            'start',
-            'end',
-            'tool'
-        ]
+        activities = dict.fromkeys(ACTIVITIES)
         try:
-            activities = {
-                'Acquisition':
-                    df.rename(columns=self._mapper('acquisition'))[
-                    columns[:2] + ['technique'] + columns[2:]
-                    ], # Add technique column in the right position
-                'Processing':
-                    df.rename(columns=self._mapper('processing'))[columns],
-                'Modelling':
-                    df.rename(columns=self._mapper('modelling'))[columns],
-                'Optimising':
-                    df.rename(columns=self._mapper('optimising'))[columns],
-                'Exporting':
-                    df.rename(columns=self._mapper('exporting'))[columns]
-            }
-        except KeyError:
+            for name in activities.keys():
+                if name == 'acquisition':
+                    activities[name] = df.rename(columns=self._json_map(name))[ACQUISITION_COLUMNS]
+                else:
+                    activities[name] = df.rename(columns=self._json_map(name))[ACTIVITY_COLUMNS]
+        except KeyError as e:
+            print(e)
             return False
 
         # Initialize an empty DataFrame to store tool information
@@ -344,25 +329,25 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             activity.dropna(subset=['institute', 'internalId'], inplace=True)
 
             # Add activity prefix to the internalId
-            activity.internalId = name.lower() + '-' + activity.internalId
+            activity.internalId = name + '-' + activity.internalId
 
             # Create a tool_df combining internalId and tool columns,
             # drop rows where internalId is not defined and split each list
             # in the tool column into a separate row, while duplicating the
             # internalId values for each expandend row (explode method)
-            tool_df = concat([activity.internalId, tool], axis=1) \
+            activity_tools = concat([activity.internalId, tool], axis=1) \
                   .dropna(subset=['internalId']) \
                   .explode('tool')
-            tool_df.tool = tool_df.tool.str.strip()
+            activity_tools.tool = activity_tools.tool.str.strip()
 
             # Concatenate tool_df with tools DataFrame to accumulate results
-            tools = concat([tools, tool_df], axis=0, ignore_index=True)
+            tools = concat([tools, activity_tools], axis=0, ignore_index=True)
 
         # Add tables to the database
         database = self.getDbPathOrUrl()
         with connect(database) as con:
             for name, activity in activities.items():
-                activity.to_sql(name, con, if_exists='replace', index=False, dtype='TEXT')
+                activity.to_sql(name.capitalize(), con, if_exists='replace', index=False, dtype='TEXT')
             tools.to_sql('Tool', con, if_exists='replace', index=False, dtype='TEXT')
 
         return True
@@ -373,23 +358,23 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
 
 class QueryHandler(Handler):
     def getById(self, identifiers: str | list[str]):
-        # Convert identifiers to a list if it is a single string
+        # Convert identifiers to a joined string if it is a list
         if isinstance(identifiers, str):
-            return [identifiers]
+            return f'"{identifiers}"'
         else:
-            return identifiers
+            return ', '.join(f'"{identifier}"' for identifier in identifiers)
 
 
 class MetadataQueryHandler(QueryHandler): # Francesca
     def getById(self, identifiers: str | list[str]) -> DataFrame:
-        # Normalize identifiers to a list
+        # Normalize identifiers to a string
         identifiers = super().getById(identifiers)
 
         # Construct VALUES clause for SPARQL query, specifying identifiers
         # as parameters
         value_clause = f"""
-            VALUES ?identifier {{ {' '.join(f'"{identifier}"' for identifier in identifiers)} }}
-          }}
+        VALUES ?identifier {{ {identifiers} }}
+    }}
         """
         endpoint = self.getDbPathOrUrl()
 
@@ -412,14 +397,15 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
     def getAllPeople(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = PERSON_QUERY + '      } ORDER BY ?name'
+        query = PERSON_QUERY + '} ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
 
         return df
 
     def getAllCulturalHeritageObjects(self) -> DataFrame:
         endpoint = self.getDbPathOrUrl()
-        query = OBJECT_QUERY + '      }'
+        query = OBJECT_QUERY + '}'
+
         # Sort the DataFrame by identifier using an alphanumeric sort key
         df = get(endpoint, query, True) \
             .astype('string') \
@@ -436,7 +422,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         # chained triple pattern means that the person identified by
         # ?internalId is the creator (object of dc:creator predicate) of an
         # implicit cultural heritage object with identifier 'objectId'.
-        query = PERSON_QUERY + f'                   ^dc:creator / dc:identifier "{objectId}" .\n          }} ORDER BY ?name'
+        query = PERSON_QUERY + f'               ^dc:creator / dc:identifier "{objectId}" .\n    }} ORDER BY ?name'
         df = get(endpoint, query, True).astype('string')
 
         return df
@@ -449,7 +435,7 @@ class MetadataQueryHandler(QueryHandler): # Francesca
         # Because 'personId' was not linked to ?hasAuthor, the query retrieves
         # all the authors associated with the cultural heritage object,
         # regardless of which specific author was used to select that object.
-        query = OBJECT_QUERY + f'\n            ?internalId dc:creator / dc:identifier "{personId}" .\n          }}'
+        query = OBJECT_QUERY + f'\n        ?internalId dc:creator / dc:identifier "{personId}" .\n    }}'
         df = get(endpoint, query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(alphanumeric_sort), ignore_index=True)
@@ -459,34 +445,49 @@ class MetadataQueryHandler(QueryHandler): # Francesca
 
 
 class ProcessDataQueryHandler(QueryHandler): # Anna
+    def _sql_query(self, activity_list: list[str], filter_condition: str = '') -> DataFrame:
+        db = self.getDbPathOrUrl()
+        activities = dict.fromkeys(activity_list)
+
+        with connect(db) as con:
+            for name in activities.keys():
+                if name == 'acquisition':
+                    columns = ACQUISITION_COLUMNS[1:-1]
+                else:
+                    columns = ACTIVITY_COLUMNS[1:-1]
+
+                columns_str = ", ".join(columns)
+                sql = f"""
+                    SELECT {columns_str}, GROUP_CONCAT(t2.tool) AS tool
+                    FROM {name.capitalize()} AS t1
+                    JOIN Tool AS t2
+                    ON t1.internalId = t2.internalId
+                    {filter_condition}
+                    GROUP BY {columns_str};
+                    """
+                # Execute the query and store the resulting DataFrame in the dictionary
+                activities[name] = read_sql_query(sql, con)
+
+        for name, activity in activities.items():
+            activity.tool = activity.tool.apply(lambda x: set(x.split(',')) if x else set())
+            activities[name] = activity.set_index('refersTo')
+        
+        df = concat(activities.values(), axis=1, join='outer', keys=activities.keys()) \
+            .reset_index(col_level=1) \
+            .sort_values(by=('', 'refersTo'), key=lambda x: x.map(alphanumeric_sort), ignore_index=True)
+
+        return df
+
     def getById(self, identifiers: str | list[str]) -> DataFrame:
-        # Normalize identifiers to a list
+        # Normalize identifiers to a string
         identifiers = super().getById(identifiers)
+        return self._sql_query(ACTIVITIES, f'WHERE t1.refersTo IN ({identifiers})')
 
     def getAllActivities(self) -> DataFrame:
-        database = self.getDbPathOrUrl()
-        with connect(database) as con:
-            tool = read_sql_query("SELECT * FROM Tool", con)
-            acquisition = read_sql_query("SELECT * FROM Acquisition", con)
-            processing = read_sql_query("SELECT * FROM Processing", con)
-            modelling = read_sql_query("SELECT * FROM Modelling", con)
-            optimising = read_sql_query("SELECT * FROM Optimising", con)
-            exporting = read_sql_query("SELECT * FROM Exporting", con)
-
-        tool = tool.groupby('internalId')['tool'].apply(lambda x: set(filter(None, x)))
-        acquisition = acquisition.merge(tool, how='left', on='internalId') 
-        processing = processing.merge(tool, how='left', on='internalId') 
-        modelling = modelling.merge(tool, how='left', on='internalId')
-        optimising = optimising.merge(tool, how='left', on='internalId')  
-        exporting = exporting.merge(tool, how='left', on='internalId') 
-            
-        activities = [acquisition, processing, modelling, optimising, exporting]
-        for activity in activities:
-            print(activity)
-        
+        return self._sql_query(ACTIVITIES)
 
     def getActivitiesByResponsibleInstitution(self, partialName: str) -> DataFrame:
-        pass
+        return self._sql_query(ACTIVITIES, f"WHERE t1.institute LIKE '%{partialName}%'")
 
     def getActivitiesByResponsiblePerson(self, partialName: str) -> DataFrame:
         pass
@@ -494,7 +495,7 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
     def getActivitiesUsingTool(self, partialName: str) -> DataFrame:
         pass
 
-    def getActivitiesStartedAfter(self, date: str) -> DataFrame:
+    def getActivitiesStartedAfter(self, date: str) -> DataFrame:        
         pass
 
     def getActivitiesEndedBefore(self, date: str) -> DataFrame:

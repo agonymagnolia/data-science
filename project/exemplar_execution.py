@@ -58,13 +58,13 @@ print('\n******************************* PROCESS DATA QUERY HANDLER ************
 
 print('\nID 150\n', process_qh.getById('150'))
 
-print('\nID 2\n', process_qh.getById('2'))
-
-print('\nID 5\n', process_qh.getById('5'))
+print('\nID 10\n', process_qh.getById('10'))
 
 print('\nID 11\n', process_qh.getById('11'))
 
 print('\nID 13\n', process_qh.getById('13'))
+
+print('\nID 14\n', process_qh.getById('14'))
 
 print('\nID 23\n', process_qh.getById('23'))
 
