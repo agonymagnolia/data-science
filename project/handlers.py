@@ -490,16 +490,19 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
         return self._sql_query(ACTIVITIES, f"WHERE t1.institute LIKE '%{partialName}%'")
 
     def getActivitiesByResponsiblePerson(self, partialName: str) -> DataFrame:
-        pass
+        return self._sql_query(ACTIVITIES, f"WHERE t1.person LIKE '%{partialName}%'")
 
     def getActivitiesUsingTool(self, partialName: str) -> DataFrame:
-        pass
+        return self._sql_query(ACTIVITIES, f"WHERE t2.tool LIKE '%{partialName}%'")
 
     def getActivitiesStartedAfter(self, date: str) -> DataFrame:        
-        pass
-
+        return self._sql_query(ACTIVITIES, f" WHERE  date(t1.start) >= '{date}'") #ordinati secondo refersTo
+    
     def getActivitiesEndedBefore(self, date: str) -> DataFrame:
-        pass
+        return self._sql_query(ACTIVITIES, f" WHERE  date(t1.start) <= '{date}'")
 
     def getAcquisitionsByTechnique(self, partialName: str) -> DataFrame:
+        #return self._sql_query(ACQUISITION_COLUMNS, f"WHERE t1.technique LIKE '%{partialName}%'")
         pass
+        
+
