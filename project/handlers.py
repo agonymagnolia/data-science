@@ -258,9 +258,15 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
+    def __init__(self):
+        super().__init__()
+
+        # Initialize an empty set to store object IDs
+        self.object_ids: set[str] = set()
+
     def _json_map(self, activity: str) -> dict[str, str]:
         return {
-            'object id': 'internalId',
+            'object id': 'refersTo',
             f'{activity}.responsible institute': 'institute',
             f'{activity}.responsible person': 'person',
             f'{activity}.technique': 'technique',
@@ -274,6 +280,15 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             return False
         try:
             con = connect(self.getDbPathOrUrl())
+            
+            # Retrieve existing IDs from the database and store them in a set
+            query = '\nUNION ALL\n'.join([f"SELECT refersTo FROM {activity}" for activity in ACTIVITIES])
+            try:
+                self.object_ids.update(row[0] for row in con.execute(query).fetchall())
+            except Error:
+                # Tables do not exist
+                pass
+
             con.close()
             return True
         except Error as e:
@@ -293,11 +308,18 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         # Flatten the json file in one DataFrame
         df = json_normalize(json_doc)
 
-        # Drop potential duplicated entities
-        df.drop_duplicates(subset='object id', inplace=True)
+        # Check for existing IDs and skip if already present and drop
+        # potential duplicated entities
+        df = df[~df['object id'].isin(self.object_ids)] \
+            .drop_duplicates(subset='object id')
 
-        # Duplicate the object id column to represent the refersTo relation
-        df['refersTo'] = df['object id']
+        if df.empty:
+            return True
+
+        self.object_ids.update(df['object id'])
+
+        # Duplicate the object id column to identify the activity
+        df['internalId'] = df['object id']
 
         # Rename columns for each activity, select the relevant columns and
         # store each DataFrame in a dictionary to access easily their names
@@ -334,7 +356,7 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             # Create a tool_df combining internalId and tool columns,
             # drop rows where internalId is not defined and split each list
             # in the tool column into a separate row, while duplicating the
-            # internalId values for each expandend row (explode method)
+            # internalId values for each expanded row (explode method)
             activity_tools = concat([activity.internalId, tool], axis=1) \
                   .dropna(subset=['internalId']) \
                   .explode('tool')
@@ -347,8 +369,8 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
         database = self.getDbPathOrUrl()
         with connect(database) as con:
             for name, activity in activities.items():
-                activity.to_sql(name.capitalize(), con, if_exists='replace', index=False, dtype='TEXT')
-            tools.to_sql('Tool', con, if_exists='replace', index=False, dtype='TEXT')
+                activity.to_sql(name.capitalize(), con, if_exists='append', index=False, dtype='TEXT')
+            tools.to_sql('Tool', con, if_exists='append', index=False, dtype='TEXT')
 
         return True
         
