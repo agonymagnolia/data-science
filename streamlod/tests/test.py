@@ -15,10 +15,9 @@
 import unittest
 from os import sep
 from pandas import DataFrame
-from impl import MetadataUploadHandler, ProcessDataUploadHandler
-from impl import MetadataQueryHandler, ProcessDataQueryHandler
-from impl import AdvancedMashup
-from impl import Person, CulturalHeritageObject, Activity, Acquisition
+from handlers import MetadataUploadHandler, ProcessDataUploadHandler, MetadataQueryHandler, ProcessDataQueryHandler
+from mashups import AdvancedMashup
+from data_model_classes import Person, CulturalHeritageObject, Activity, Acquisition
 
 # REMEMBER: before launching the tests, please run the Blazegraph instance!
 
@@ -29,9 +28,9 @@ class TestProjectBasic(unittest.TestCase):
     # the SPARQL endpoint must be updated depending on how you launch it - currently, it is
     # specified the URL introduced during the course, which is the one used for a standard
     # launch of the database.
-    metadata = "data" + sep + "meta.csv"
-    process = "data" + sep + "process.json"
-    relational = "." + sep + "relational.db"
+    metadata = "data/meta.csv"
+    process = "data/process.json"
+    relational = "relational.db"
     graph = "http://127.0.0.1:9999/blazegraph/sparql"
     
     def test_01_MetadataUploadHandler(self):
@@ -162,4 +161,4 @@ class TestProjectBasic(unittest.TestCase):
         r = am.getAuthorsOfObjectsAcquiredInTimeFrame("1088-01-01", "2029-01-01")
         self.assertIsInstance(r, list)
         for i in r:
-            self.assertIsInstance(i, Person)   
+            self.assertIsInstance(i, Person)

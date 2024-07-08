@@ -1,6 +1,5 @@
-from pandas import DataFrame
-
-from data_model_classes import (
+from ..handlers import MetadataQueryHandler, ProcessDataQueryHandler, ACTIVITIES
+from ..domain import (
     IdentifiableEntity,
     Person,
     CulturalHeritageObject,
@@ -19,17 +18,11 @@ from data_model_classes import (
     Processing,
     Modelling,
     Optimising,
-    Exporting,
+    Exporting
 )
+from ..utils import key
 
-from handlers import (
-    ProcessDataUploadHandler,
-    MetadataUploadHandler,
-    ProcessDataQueryHandler,
-    MetadataQueryHandler,
-)
-
-# -----------------------------------------------------------------------------
+from pandas import DataFrame, concat
 
 class BasicMashup:
     def __init__(self):
@@ -37,14 +30,14 @@ class BasicMashup:
         self.processQuery = list()
 
     def _to_person(self, df: DataFrame) -> list[Person]:
-        # Unpack values from the row and feed them to the class cosntructor
+        # Unpack values from the row and feed them to the class constructor
         return [Person(*row) for row in df.to_numpy(dtype=object, na_value=None)]
 
     def _to_cho(self, df: DataFrame) -> list[CulturalHeritageObject]:
         result = list()
 
         # Variable to track the current object identifier
-        obj_id = ''
+        object_id = ''
 
         # Unpack values from each row and feed them to the class constructor.
         # NaN values are turned to None and handled accordingly by the class
@@ -54,22 +47,43 @@ class BasicMashup:
             # If the identifier is the same of the previous row, do not
             # recreate the object but only append the author to the hasAuthor
             # list of the last created object
-            if obj_id != row[1]:
-                obj_id = row[1]
+            if object_id != row[1]:
+                object_id = row[1]
 
                 # Retrieve the constructor of the class from its name
-                obj_class = eval(row[0])
+                object_class = eval(row[0])
 
                 # Create a new object and append it to the result list
-                result.append(obj_class(*row[1:6]))
+                result.append(object_class(*row[1:-2]))
             
-            if row[6]:
-                result[-1].hasAuthor.append(Person(*row[6:8]))
+            if row[-2]:
+                result[-1].hasAuthor.append(Person(*row[-2:]))
 
         return result
 
-    def _to_activity(self, df: DataFrame) -> list[Activity]: # Lin
-        pass
+    def _to_activity(self, df: DataFrame) -> list[Activity]:
+        if df.empty:
+            return list()
+
+        activity_ids = df.index
+        object_ids, objects = self.getCulturalHeritageObjectsById(activity_ids)
+
+        activity_map = []
+        for activity_name in df.columns.get_level_values(0).unique():
+            activity_class = eval(activity_name)
+            step = len(ACTIVITIES[activity_name]) - 1
+            activity_map.append((activity_class, step))
+
+        result = []
+        for row, obj in zip(df[activity_ids.isin(object_ids)].to_numpy(dtype=object, na_value=None), objects):
+            index = 0
+            for activity_class, step in activity_map:
+                data = row[index:index + step]
+                if data[0]:
+                    result.append(activity_class(obj, *data))
+                index += step
+
+        return result
 
     def cleanMetadataHandlers(self) -> bool:
         self.metadataQuery = list()
@@ -103,6 +117,23 @@ class BasicMashup:
 
         else:
             return None
+
+    def getCulturalHeritageObjectsById(self, identifiers: list[str]) -> tuple[set[str], list[CulturalHeritageObject]]: # Francesca
+        object_ids, result = set(), list()
+        for handler in self.metadataQuery:
+            df = handler.getById(identifiers)
+
+            if df.empty:
+                continue
+            else:
+                object_ids.update(df.identifier)
+                result += self._to_cho(df)
+
+        # Manage duplicate and/or unordered metadata query handlers
+        if len(self.metadataQuery) > 1:
+            result = sorted(list(set(result)))
+
+        return object_ids, result
 
     def getAllPeople(self) -> list[Person]: # Francesca
         result = list()
@@ -161,7 +192,12 @@ class BasicMashup:
             return list()
 
     def getAllActivities(self) -> list[Activity]: # Lin
-        pass
+        try:
+            df = concat(handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
 
     def getActivitiesByResponsibleInstitution(self, partialName: str) -> list[Activity]: # Lin
         pass
@@ -179,22 +215,4 @@ class BasicMashup:
         pass
 
     def getAcquisitionsByTechnique(self, partialName: str) -> list[Acquisition]: # Lin
-        pass
-
-
-
-
-
-
-class AdvancedMashup(BasicMashup): # Lin
-    def getActivitiesOnObjectsAuthoredBy(self, personId: str) -> list[Activity]:
-        pass
-
-    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
-        pass
-
-    def getObjectsHandledByResponsibleInstitution(self, partialName: str) -> list[CulturalHeritageObject]:
-        pass
-
-    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
         pass
