@@ -17,7 +17,7 @@ class Activity(object):
         start: str | None = None,
         end: str | None = None,
         tool: set[str] | None = None
-        ):
+    ):
         self.institute = institute
         self.person = person
         # Setting the default value directly as empty set would
@@ -110,7 +110,7 @@ class Acquisition(Activity):
         start: str | None = None,
         end: str | None = None,
         tool: set[str] | None = None,
-        ):
+    ):
         super().__init__(refersTo, institute, person, start, end, tool)
         self.technique = technique
 

@@ -5,11 +5,11 @@ class IdentifiableEntity:
         self.identifier = identifier
 
     def __eq__(self, other):
-        if type(self) is type(other):
-            return self.__dict__ == other.__dict__
-        else:
+        if not isinstance(other, self.__class__):
             return False
-    
+
+        return self.identifier == other.identifier
+
     def getId(self) -> str:
         return self.identifier
 
@@ -25,6 +25,13 @@ class Person(IdentifiableEntity):
     def __rich_repr__(self):
         yield self.name
         yield "id", self.identifier
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        
+        return (self.identifier == other.identifier and
+                self.name == other.name)
 
     def __lt__(self, other):
         return self.name < other.name
@@ -45,7 +52,7 @@ class CulturalHeritageObject(IdentifiableEntity):
         place: str,
         date: str | None = None,
         hasAuthor: list[Person] | None = None
-        ):
+    ):
         super().__init__(identifier=identifier)
         self.title = title
         self.owner = owner
@@ -73,6 +80,17 @@ class CulturalHeritageObject(IdentifiableEntity):
         yield "place", self.place
         yield "date", self.date
         yield "hasAuthor", self.hasAuthor
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        
+        return (self.identifier == other.identifier and
+                self.title == other.title and
+                self.owner == other.owner and
+                self.place == other.place and
+                self.date == other.date and
+                tuple(self.hasAuthor) == tuple(other.hasAuthor))
 
     def __lt__(self, other):
         # Numeric and alphabetic identifiers are placed respecitvely

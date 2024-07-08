@@ -193,7 +193,7 @@ class BasicMashup:
 
     def getAllActivities(self) -> list[Activity]: # Lin
         try:
-            df = concat(handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery)
+            df = concat(handler.getAllActivities() for handler in self.processQuery)
         except ValueError:
             return list()
         df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
