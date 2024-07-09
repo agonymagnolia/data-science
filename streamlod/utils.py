@@ -1,9 +1,17 @@
-def chunker(array: 'numpy.ndarray', size: int) -> 'Generator':
-    # Size is the step of the range
-    return (array[pos:pos + size] for pos in range(0, len(array), size))
+from typing import Generator
+import numpy as np
+
+def chunker(array: np.ndarray, size: int) -> Generator[np.ndarray, None, None]:
+    """
+    Split an array into chunks of a specified size.
+    """
+    for pos in range(0, len(array), size): # Size is the step of the range
+        yield array[pos:pos + size]
 
 def id_join(identifiers: str | list[str], join_char: str = ' '):
-    # Convert identifiers to a joined string if it is a list
+    """
+    Normalize input identifiers (strings or lists) into a joined string for queries.
+    """
     if isinstance(identifiers, str) or isinstance(identifiers, int):
         return f'"{identifiers}"'
     else:

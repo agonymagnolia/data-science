@@ -1,13 +1,15 @@
-from .base import UploadHandler, QueryHandler
-from ..utils import chunker, id_join, key
-
+from typing import Union, List, Set
+import pandas as pd
+import numpy as np
 from rdflib.graph import Graph
 from rdflib.term import URIRef, Literal
 from rdflib.namespace import Namespace, DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from urllib.error import URLError
-from pandas import DataFrame, read_csv
 from sparql_dataframe import get
+
+from .base import UploadHandler, QueryHandler
+from ..utils import chunker, id_join, key
 
 CHO_ATTRIBUTES = { # Attribute : required
     'identifier': True,
@@ -72,7 +74,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             'Map': 'Map'
         }
 
-    def __init__(self) -> None:
+    def __init__(self):
         # The store configuration is initialised as an instance variable,
         # each MetadataUploadHandler instance has its own store
         super().__init__()
@@ -81,7 +83,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         self.store = SPARQLUpdateStore(autocommit=False, context_aware=False)
         self.store.setTimeout(60)
         self.store.method = 'POST'
-        self.entities: set[str] = set() # Set of entity IDs inside the database
+        self.identifiers: Set[str] = set() # Set of entity IDs inside the database
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
         if not super().setDbPathOrUrl(newDbPathOrUrl):
@@ -92,7 +94,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
         try:
             store.open((endpoint, endpoint))
-            self.entities.update(identifier.value for identifier in store.objects(predicate=DC.identifier))
+            self.identifiers.update(identifier.value for identifier in store.objects(predicate=DC.identifier))
             store.close()
             return True
 
@@ -100,7 +102,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             print(e)
             return False
 
-    def _to_rdf(self, array: 'numpy.ndarray', graph: Graph) -> None:
+    def _to_rdf(self, array: np.ndarray, graph: Graph) -> None:
         for row in array:
             subject = MAG['CHO-' + row[0]]
 
@@ -127,8 +129,8 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
                     author = MAG['Person-' + identifier]
 
-                    if identifier not in self.entities:
-                        self.entities.add(identifier)
+                    if identifier not in self.identifiers:
+                        self.identifiers.add(identifier)
                         graph.add((author, RDF.type, EDM.Agent))
                         graph.add((author, DC.identifier, Literal(identifier)))
                         graph.add((author, FOAF.name, Literal(name)))
@@ -142,7 +144,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         # Link graph to store to commit directly the triples to the database
         graph = Graph(store)
 
-        df = read_csv(
+        df = pd.read_csv(
             path,
             header=0,
             names=CHO_ATTRIBUTES,
@@ -156,12 +158,12 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             df[col] = df[col].str.strip() # trim spaces in every column
 
         # Drop entities already in database or duplicated
-        df = df[~df['identifier'].isin(self.entities) & ~df.duplicated('identifier')]
+        df = df[~df['identifier'].isin(self.identifiers) & ~df.duplicated('identifier')]
 
         if df.empty:
             return True
 
-        self.entities.update(df['identifier'])
+        self.identifiers.update(df['identifier'])
 
         # Change corresponding entries based on dictionary, others are
         # turned to NaN
@@ -196,7 +198,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
 
 class MetadataQueryHandler(QueryHandler):
-    def getById(self, identifiers: str | list[str]) -> DataFrame:
+    def getById(self, identifiers: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string
         identifiers = id_join(identifiers)
         # Construct values clause for SPARQL query, specifying identifiers
@@ -209,13 +211,13 @@ class MetadataQueryHandler(QueryHandler):
 
         # First try to look for cultural heritage objects
         query = OBJECT_QUERY + value_clause
-        df = get(endpoint, query, True).astype('string')
+        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
 
         # If the object query found nothing, retry looking for people with
         # the same value clause
         if df.empty:
             query = PERSON_QUERY + value_clause
-            df = get(endpoint, query, True).astype('string')
+            df = get(endpoint, query, True).astype('string').sort_values(by='name', ignore_index=True)
 
         # If the object query was successful, remove personal namespace URL
         # from class entities
@@ -224,27 +226,24 @@ class MetadataQueryHandler(QueryHandler):
 
         return df
 
-    def getAllPeople(self) -> DataFrame:
-        endpoint = self.getDbPathOrUrl()
+    def getAllPeople(self) -> pd.DataFrame:
         query = PERSON_QUERY + '} ORDER BY ?name'
-        df = get(endpoint, query, True).astype('string')
+        df = get(self.getDbPathOrUrl(), query, True).astype('string')
 
         return df
 
-    def getAllCulturalHeritageObjects(self) -> DataFrame:
-        endpoint = self.getDbPathOrUrl()
+    def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
         query = OBJECT_QUERY + '}'
 
         # Sort the DataFrame by identifier using an alphanumeric sort key
-        df = get(endpoint, query, True) \
+        df = get(self.getDbPathOrUrl(), query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
         df['class'] = df['class'].str.replace(str(MAG), '')
 
         return df
 
-    def getAuthorsOfCulturalHeritageObject(self, objectId: str | list[str]) -> DataFrame:
-        endpoint = self.getDbPathOrUrl()
+    def getAuthorsOfCulturalHeritageObject(self, objectId: str | list[str]) -> pd.DataFrame:
         objectId = id_join(objectId)
         # The ^ symbol in SPARQL reverses the subject and object of the triple
         # pattern, concisely allowing the subject of the previous triples to
@@ -259,12 +258,11 @@ class MetadataQueryHandler(QueryHandler):
 
     }} ORDER BY ?name
         """
-        df = get(endpoint, query, True).astype('string')
+        df = get(self.getDbPathOrUrl(), query, True).astype('string')
 
         return df
 
-    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> DataFrame:
-        endpoint = self.getDbPathOrUrl()
+    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> pd.DataFrame:
         personId = id_join(personId)
         # The / symbol in SPARQL allows for an implicit unnamed node that is
         # the object of the first triple pattern and the subject of the
@@ -278,7 +276,7 @@ class MetadataQueryHandler(QueryHandler):
         VALUES ?personId {{ {personId} }}
     }}
         """
-        df = get(endpoint, query, True) \
+        df = get(self.getDbPathOrUrl(), query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
         df['class'] = df['class'].str.replace(str(MAG), '')

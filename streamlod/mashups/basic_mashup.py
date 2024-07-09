@@ -1,96 +1,39 @@
+from typing import Union, List, Tuple, Set
+import pandas as pd
+
 from ..handlers import MetadataQueryHandler, ProcessDataQueryHandler, ACTIVITIES
 from ..domain import (
     IdentifiableEntity,
     Person,
     CulturalHeritageObject,
-    NauticalChart,
-    ManuscriptPlate,
-    ManuscriptVolume,
-    PrintedVolume,
-    PrintedMaterial,
-    Herbarium,
-    Specimen,
-    Painting,
-    Model,
-    Map,
     Activity,
-    Acquisition,
-    Processing,
-    Modelling,
-    Optimising,
-    Exporting
+    Acquisition
 )
 from ..utils import key
-
-from pandas import DataFrame, concat
+import streamlod.domain as domain
 
 class BasicMashup:
+    """
+    The BasicMashup class manages one-sided filter queries to multiple graph or relational databases
+    and integrates the data into unified Python objects.
+
+    - For single match queries (e.g., getEntityById, getAuthorsOfCulturalHeritageObject), 
+      the iteration on the handler instances stops at the first result found.
+    - For multiple single matches (e.g., getCulturalHeritageObjectsByIds),
+      the search stops once all matches are found or all handlers have been queried.
+    - For other queries (e.g., getAllActivities, getCulturalHeritageObjectsAuthoredBy), 
+      results from all handlers are aggregated.
+    """
     def __init__(self):
-        self.metadataQuery = list()
-        self.processQuery = list()
-
-    def _to_person(self, df: DataFrame) -> list[Person]:
-        # Unpack values from the row and feed them to the class constructor
-        return [Person(*row) for row in df.to_numpy(dtype=object, na_value=None)]
-
-    def _to_cho(self, df: DataFrame) -> list[CulturalHeritageObject]:
-        result = list()
-
-        # Variable to track the current object identifier
-        object_id = ''
-
-        # Unpack values from each row and feed them to the class constructor.
-        # NaN values are turned to None and handled accordingly by the class
-        # __init__. Attribute hasAuthor is aways initialised as an empty list
-        # and populated after the object creation.
-        for row in df.to_numpy(dtype=object, na_value=None):
-            # If the identifier is the same of the previous row, do not
-            # recreate the object but only append the author to the hasAuthor
-            # list of the last created object
-            if object_id != row[1]:
-                object_id = row[1]
-
-                # Retrieve the constructor of the class from its name
-                object_class = eval(row[0])
-
-                # Create a new object and append it to the result list
-                result.append(object_class(*row[1:-2]))
-            
-            if row[-2]:
-                result[-1].hasAuthor.append(Person(*row[-2:]))
-
-        return result
-
-    def _to_activity(self, df: DataFrame) -> list[Activity]:
-        if df.empty:
-            return list()
-
-        activity_ids = df.index
-        object_ids, objects = self.getCulturalHeritageObjectsById(activity_ids)
-
-        activity_map = []
-        for activity_name in df.columns.get_level_values(0).unique():
-            activity_class = eval(activity_name)
-            step = len(ACTIVITIES[activity_name]) - 1
-            activity_map.append((activity_class, step))
-
-        result = []
-        for row, obj in zip(df[activity_ids.isin(object_ids)].to_numpy(dtype=object, na_value=None), objects):
-            index = 0
-            for activity_class, step in activity_map:
-                data = row[index:index + step]
-                if data[0]:
-                    result.append(activity_class(obj, *data))
-                index += step
-
-        return result
+        self.metadataQuery = []
+        self.processQuery = []
 
     def cleanMetadataHandlers(self) -> bool:
-        self.metadataQuery = list()
+        self.metadataQuery = []
         return True
 
     def cleanProcessHandlers(self) -> bool:
-        self.processQuery = list()
+        self.processQuery = []
         return True
 
     def addMetadataHandler(self, handler: MetadataQueryHandler) -> bool:
@@ -101,149 +44,190 @@ class BasicMashup:
         self.processQuery.append(handler)
         return True
 
-    def getEntityById(self, identifier: str) -> IdentifiableEntity | None: # Francesca
-        # For search queries the iteration on the handler instances stops
-        # at the first result found, while in the getAll methods the results
-        # are aggregated
+    def normalizeDFs(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]], object_class: str) -> pd.DataFrame:
+        """
+        Normalize input DataFrame or list of DataFrames.
+
+        - If all DataFrames in the list are empty, returns an empty DataFrame.
+        - If there is a single DataFrame it is returned as is.
+        - If more, they are concatenated.
+        """
+        if isinstance(dfs, list):
+            non_empty_dfs = [df for df in dfs if not df.empty]
+            if not non_empty_dfs:
+                return pd.DataFrame()
+            elif len(non_empty_dfs) == 1:
+                return non_empty_dfs[0]
+            else:
+                return self.concatDedupSort(non_empty_dfs, object_class)
+        else:
+            return dfs
+
+    def concatDedupSort(self, dfs: List[pd.DataFrame], object_class: str) -> pd.DataFrame:
+        """
+        Concatenate DataFrames, remove duplicates, and sort based on the object class.
+        """
+        df = pd.concat(dfs)
+
+        match object_class:
+            case 'Person':
+                df = df[~df.duplicated('identifier')].sort_values(by='name', ignore_index=True)
+            case 'CulturalHeritageObject':
+                df = df[~df.duplicated(['identifier', 'author_id'])].sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
+            case 'Activity':
+                df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+
+        return df
+
+    def toPerson(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Person]:
+        """
+        Convert DataFrame(s) into a list of Person objects.
+        """
+        result = []
+        df = self.normalizeDFs(dfs, 'Person')
+
+        if df.empty:
+            return result
+
+        # Create Person objects from DataFrame rows
+        for row in df.to_numpy(dtype=object, na_value=None):
+            result.append(Person(*row))
+
+        return result
+
+    def toCHO(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[CulturalHeritageObject]:
+        """
+        Convert DataFrame(s) into a list of CulturalHeritageObjects.
+        """
+        result = []
+        df = self.normalizeDFs(dfs, 'CulturalHeritageObject')
+
+        if df.empty:
+            return result
+
+        object_id = '' # Variable to track the current object identifier
+        for row in df.to_numpy(dtype=object, na_value=None):
+            # Create a new object if the identifier is different from the previous row
+            if object_id != row[1]:
+                object_id = row[1]
+                object_class = getattr(domain, row[0])
+                result.append(object_class(*row[1:-2]))
+            # Append author to the hasAuthor list if present
+            if row[-2]:
+                result[-1].hasAuthor.append(Person(*row[-2:]))
+
+        return result
+
+    def toActivity(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Activity]:
+        """
+        Convert DataFrame(s) into a list of Activity objects.
+        """
+        result = []
+        df = self.normalizeDFs(dfs, 'Activity')
+
+        if df.empty:
+            return result
+
+        activity_ids = df.index
+        objects, missing_ids = self.getCulturalHeritageObjectsByIds(activity_ids)
+        # Map activity names to their corresponding classes and attribute counts
+        row_map = [
+            (getattr(domain, activity_name), len(ACTIVITIES[activity_name]) - 1) # Do not count 'refersTo'
+            for activity_name in df.columns.get_level_values(0).unique()
+        ]
+        array = df[~activity_ids.isin(missing_ids)].to_numpy(dtype=object, na_value=None)
+        # Iterate through the DataFrame rows, creating Activity objects and linking them with objects
+        for obj, row in zip(objects, array):
+            index = 0
+            for activity_class, step in row_map:
+                data = row[index:index + step]
+                if data[0]: # Only create an activity if institute is defined
+                    result.append(activity_class(obj, *data))
+                index += step
+
+        return result
+
+    def getEntityById(self, identifier: str) -> Union[IdentifiableEntity, None]: # Francesca
         for handler in self.metadataQuery:
             df = handler.getById(identifier)
-
             if df.empty:
                 continue
             elif 'class' in df: # The result is an object
-                return self._to_cho(df)[0]
+                return self.toCHO(df)
             else:
-                return self._to_person(df)[0]
-
+                return self.toPerson(df)
         else:
             return None
 
-    def getCulturalHeritageObjectsById(self, identifiers: list[str]) -> tuple[set[str], list[CulturalHeritageObject]]: # Francesca
-        object_ids, result = set(), list()
-        for handler in self.metadataQuery:
-            df = handler.getById(identifiers)
+    def getCulturalHeritageObjectsByIds(self, identifiers: Union[List[str], Set[str]]) -> Tuple[List[CulturalHeritageObject], Set[str]]: # Francesca
+        """
+        Retrieve cultural heritage objects by their identifiers from multiple metadata handlers.
 
+        In addition to the object list, the set of identifiers that were not found is also returned
+        for alignment purposes during the construction of Activity objects.
+        """
+        dfs = []
+        i = 0
+        identifiers = set(identifiers)
+        while i < len(self.metadataQuery) and identifiers:
+            df = self.metadataQuery[i].getById(identifiers)
             if df.empty:
+                i += 1
                 continue
-            else:
-                object_ids.update(df.identifier)
-                result += self._to_cho(df)
+            identifiers -= set(df['identifier'])
+            dfs.append(df)
+            i += 1
 
-        # Manage duplicate and/or unordered metadata query handlers
-        if len(self.metadataQuery) > 1:
-            result = sorted(list(set(result)))
+        return self.toCHO(dfs), identifiers
 
-        return object_ids, result
+    def getAllPeople(self) -> List[Person]: # Francesca
+        dfs = [handler.getAllPeople() for handler in self.metadataQuery]
+        return self.toPerson(dfs)
 
-    def getAllPeople(self) -> list[Person]: # Francesca
-        result = list()
-        for handler in self.metadataQuery:
-            df = handler.getAllPeople()
+    def getAllCulturalHeritageObjects(self) -> List[CulturalHeritageObject]: # Francesca
+        dfs = [handler.getAllCulturalHeritageObjects() for handler in self.metadataQuery]
+        return self.toCHO(dfs)
 
-            if df.empty:
-                continue
-            else:
-                result += self._to_person(df)
-
-        # Manage duplicate and/or unordered metadata query handlers
-        if len(self.metadataQuery) > 1:
-            return sorted(list(set(result)))
-        else:
-            return result
-
-    def getAllCulturalHeritageObjects(self) -> list[CulturalHeritageObject]: # Francesca
-        result = list()
-        for handler in self.metadataQuery:
-            df = handler.getAllCulturalHeritageObjects()
-
-            if df.empty:
-                continue
-            else:
-                result += self._to_cho(df)
-
-        # Manage duplicate and/or unordered metadata query handlers
-        if len(self.metadataQuery) > 1:
-            return sorted(list(set(result)))
-        else:
-            return result
-
-    def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> list[Person]: # Francesca
+    def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> List[Person]: # Francesca
+        # Because of the structure of metadata, all authors of an object are guaranteed to be in the same database
         for handler in self.metadataQuery:
             df = handler.getAuthorsOfCulturalHeritageObject(objectId)
-
             if df.empty:
                 continue
             else:
-                return self._to_person(df)
-
+                return self.toPerson(df)
         else:
-            return list()
+            return []
 
-    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> list[CulturalHeritageObject]: # Francesca
-        for handler in self.metadataQuery:
-            df = handler.getCulturalHeritageObjectsAuthoredBy(personId)
+    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> List[CulturalHeritageObject]: # Francesca
+        # Objects authored by the same person might be in different databases
+        dfs = [handler.getCulturalHeritageObjectsAuthoredBy(personId) for handler in self.metadataQuery]
+        return self.toCHO(dfs)
 
-            if df.empty:
-                continue
-            else:
-                return self._to_cho(df)
+    def getAllActivities(self) -> List[Activity]: # Lin
+        dfs = [handler.getAllActivities() for handler in self.processQuery]
+        return self.toActivity(dfs)
 
-        else:
-            return list()
+    def getActivitiesByResponsibleInstitution(self, partialName: str) -> List[Activity]: # Lin
+        dfs = [handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery]
+        return self.toActivity(dfs)
 
-    def getAllActivities(self) -> list[Activity]: # Lin
-        try:
-            df = concat(handler.getAllActivities() for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
+    def getActivitiesByResponsiblePerson(self, partialName: str) -> List[Activity]: # Lin
+        dfs = [handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery]
+        return self.toActivity(dfs)
 
-    def getActivitiesByResponsibleInstitution(self, partialName: str) -> list[Activity]: # Lin
-        try:
-            df = concat(handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
-    
+    def getActivitiesUsingTool(self, partialName: str) -> List[Activity]: # Lin
+        dfs = [handler.getActivitiesUsingTool(partialName) for handler in self.processQuery]
+        return self.toActivity(dfs)
 
-    def getActivitiesByResponsiblePerson(self, partialName: str) -> list[Activity]: # Lin
-        try:
-            df = concat(handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
+    def getActivitiesStartedAfter(self, date: str) -> List[Activity]: # Lin
+        dfs = [handler.getActivitiesStartedAfter(date) for handler in self.processQuery]
+        return self.toActivity(dfs)
 
-    def getActivitiesUsingTool(self, partialName: str) -> list[Activity]: # Lin
-        try:
-            df = concat(handler.getActivitiesUsingTool(partialName) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
+    def getActivitiesEndedBefore(self, date:str) -> List[Activity]: # Lin
+        dfs = [handler.getActivitiesEndedBefore(date) for handler in self.processQuery]
+        return self.toActivity(dfs)
 
-    def getActivitiesStartedAfter(self, date: str) -> list[Activity]: # Lin
-        try:
-            df = concat(handler.getActivitiesStartedAfter(date) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
-
-    def getActivitiesEndedBefore(self, date:str) -> list[Activity]: # Lin
-        try:
-            df = concat(handler.getActivitiesEndedBefore(date) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
-
-    def getAcquisitionsByTechnique(self, partialName: str) -> list[Acquisition]: # Lin
-        try:
-            df = concat(handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
+    def getAcquisitionsByTechnique(self, partialName: str) -> List[Acquisition]: # Lin
+        dfs = [handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery]
+        return self.toActivity(dfs)

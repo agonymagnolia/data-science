@@ -1,13 +1,15 @@
-from .basic_mashup import BasicMashup
-from ..handlers import MetadataQueryHandler, ProcessDataQueryHandler
-from ..domain import Person, CulturalHeritageObject, Activity
-from ..utils import key
-
-from pandas import DataFrame, concat, read_sql_query
-from sqlite3 import connect
+from typing import List
 from sparql_dataframe import get
+import pandas as pd
 
+from .basic_mashup import BasicMashup
+from ..domain import Person, CulturalHeritageObject, Activity
 
+class AdvancedMashup(BasicMashup): # Lin
+    """
+    The AdvancedMashup class handles two-way filter queries to multiple graph or relational databases
+    and integrates the data into unified Python objects.
+    """
 class AdvancedMashup(BasicMashup): # Lin
     def getActivitiesOnObjectsAuthoredBy(self, personId: str) -> list[Activity]:
          # Get objects authored by the person
@@ -15,32 +17,39 @@ class AdvancedMashup(BasicMashup): # Lin
         # Get activities on these objects
         object_ids = [obj.getId() for obj in objects]
         try:
-            df = concat(handler.getById(object_ids) for handler in self.processQuery)
+            df_list = [handler.getById(object_ids) for handler in self.processQuery]
+            df = pd.concat(df_list)
+            return self.toActivity(df)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
 
     def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
         try:
-            df = concat(handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery)
+            df_list = [handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery]
+            df = pd.concat(df_list)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_cho(df)
+        
+        #df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
+        #return self.toCHO(df)
 
     def getObjectsHandledByResponsibleInstitution(self, partialName: str) -> list[CulturalHeritageObject]:
         try:
-            df = concat(handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery)
+            df_list = [handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery]
+            df = pd.concat(df_list)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_cho(df)
+        
+        #df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
+        #return self.toCHO(df)
 
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
-        try:
-            df = concat(handler.getActivitiesStartedAfter(start) & handler.getActivitiesEndedBefore(end) for handler in self.processQuery)
-        except ValueError:
-            return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_person(df)
+        #try:
+        #    df_list = [handler.getActivitiesStartedAfter(start) & handler.getActivitiesEndedBefore(end) for handler in self.processQuery]
+        #    df = pd.concat(df_list)
+        #except ValueError:
+        #    return list()
+        
+        #df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
+        #return self.toPerson(df)
+        pass

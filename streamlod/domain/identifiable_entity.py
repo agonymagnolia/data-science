@@ -1,13 +1,14 @@
+from typing import Union, Optional, List
+
 from ..utils import key
 
 class IdentifiableEntity:
     def __init__(self, identifier: str):
         self.identifier = identifier
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if not isinstance(other, self.__class__):
             return False
-
         return self.identifier == other.identifier
 
     def getId(self) -> str:
@@ -16,28 +17,25 @@ class IdentifiableEntity:
 
 class Person(IdentifiableEntity):
     def __init__(self, identifier: str, name: str):
-        super().__init__(identifier=identifier)
+        super().__init__(identifier)
         self.name = name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Person(id={self.identifier!r}, name={self.name!r})'
 
     def __rich_repr__(self):
         yield self.name
         yield "id", self.identifier
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        
-        return (self.identifier == other.identifier and
+    def __eq__(self, other) -> bool:      
+        return (super().__eq__(other) and
                 self.name == other.name)
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         return self.name < other.name
 
-    def __hash__(self):
-        return hash((type(self), self.identifier, self.name))
+    def __hash__(self) -> hash:
+        return hash((self.identifier, self.name))
 
     def getName(self) -> str:
         return self.name
@@ -50,19 +48,18 @@ class CulturalHeritageObject(IdentifiableEntity):
         title: str,
         owner: str,
         place: str,
-        date: str | None = None,
-        hasAuthor: list[Person] | None = None
+        date: Optional[str] = None,
+        hasAuthor: Optional[List[Person]] = None
     ):
-        super().__init__(identifier=identifier)
+        super().__init__(identifier)
         self.title = title
         self.owner = owner
         self.place = place
         self.date = date
-        # Setting the default value directly as empty list would
-        # share the same list among all the instances of the class
-        self.hasAuthor = list() if hasAuthor is None else hasAuthor
+        # Setting the default value directly as empty list would share the same list among all the instances of the class
+        self.hasAuthor = [] if hasAuthor is None else hasAuthor
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}('
             f'id={self.identifier!r}, '
@@ -81,23 +78,19 @@ class CulturalHeritageObject(IdentifiableEntity):
         yield "date", self.date
         yield "hasAuthor", self.hasAuthor
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        
-        return (self.identifier == other.identifier and
+    def __eq__(self, other) -> bool:
+        return (super().__eq__(other) and
                 self.title == other.title and
                 self.owner == other.owner and
                 self.place == other.place and
                 self.date == other.date and
                 tuple(self.hasAuthor) == tuple(other.hasAuthor))
 
-    def __lt__(self, other):
-        # Numeric and alphabetic identifiers are placed respecitvely
-        # in a 0 tuple and in a 1 tuple to allow for comparison
+    def __lt__(self, other) -> bool:
+        # Numeric and alphabetic identifiers are placed respecitvely in a 0 or 1 tuple to allow for comparison
         return key(self.identifier) < key(other.identifier)
 
-    def __hash__(self):
+    def __hash__(self) -> hash:
         return hash((
             self.identifier,
             self.title,
@@ -109,7 +102,7 @@ class CulturalHeritageObject(IdentifiableEntity):
     def getTitle(self) -> str:
         return self.title
     
-    def getDate(self) -> str | None:
+    def getDate(self) -> Union[str, None]:
         return self.date
         
     def getOwner(self) -> str:
@@ -118,7 +111,7 @@ class CulturalHeritageObject(IdentifiableEntity):
     def getPlace(self) -> str:
         return self.place
 
-    def getAuthors(self) -> list[Person]:
+    def getAuthors(self) -> List[Person]:
         return self.hasAuthor
 
 

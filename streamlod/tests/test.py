@@ -1,7 +1,7 @@
 """
 To run the test navigate to data-science folder and run
 
-    python -m unittest streamlod/tests/test.py
+    python -m unittest discover -v -s streamlod/tests
 
 after running the Blazegraph database
 """

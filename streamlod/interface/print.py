@@ -1,14 +1,13 @@
-from os import get_terminal_size
-from pandas import set_option, option_context, IndexSlice
-try:
-    from rich.pretty import pprint as rich_print
-except:
-    from pprint import pprint as rich_print
+from typing import List, Iterable
+import os
+import pandas as pd
+from rich.pretty import pprint as rich_print
 
-WIDTH = get_terminal_size().columns
-set_option('display.width', WIDTH)
 
-def max_length(series):
+WIDTH = os.get_terminal_size().columns
+pd.set_option('display.width', WIDTH)
+
+def max_length(series: Iterable) -> int:
     max_l = 0
     for item in series:
         if isinstance(item, (set, list)):
@@ -19,7 +18,7 @@ def max_length(series):
             max_l = item_l
     return max_l
 
-def max_threshold(L, width):
+def max_threshold(L: List[int], width: int) -> int:
     low, high = 0, max(L)
     best_T = low
 
@@ -33,7 +32,7 @@ def max_threshold(L, width):
 
     return best_T
 
-def single_print(df):
+def single_print(df: pd.DataFrame) -> None:
     if df.empty:
         print(df)
         print('')
@@ -49,18 +48,18 @@ def single_print(df):
 
     max_colwidth = max_threshold(colsw, WIDTH)
     if max_colwidth >= 10:
-        with option_context("display.max_colwidth", max_colwidth):
+        with pd.option_context("display.max_colwidth", max_colwidth):
             print(df)
         print('')
         return None
 
-    with option_context("display.max_colwidth", 10):
+    with pd.option_context("display.max_colwidth", 10):
         print(df)
     print('')
     return None
 
 
-def multi_print(df):
+def multi_print(df: pd.DataFrame) -> None:
     if df.empty:
         print(df)
         print('')
@@ -72,7 +71,7 @@ def multi_print(df):
     colsw = [indexw]
 
     for activity in activities:
-        activity_colsw = [max(len(col[1]), max_length(df[col])) + 2 for col in df.loc[:, IndexSlice[activity, :]].columns]
+        activity_colsw = [max(len(col[1]), max_length(df[col])) + 2 for col in df.loc[:, pd.IndexSlice[activity, :]].columns]
         colsw_dict[activity] = activity_colsw
         colsw += activity_colsw
 
@@ -83,13 +82,13 @@ def multi_print(df):
 
     max_colwidth = max_threshold(colsw, WIDTH)
     if max_colwidth >= 15:
-        with option_context("display.max_colwidth", max_colwidth):
+        with pd.option_context("display.max_colwidth", max_colwidth):
             print(df)
         print('')
         return None
 
     for idx, activity in enumerate(activities):
-        activity_df = df.loc[:, IndexSlice[activity, :]].copy()
+        activity_df = df.loc[:, pd.IndexSlice[activity, :]].copy()
         if len(activities) > 1 and idx < (len(activities) - 1):
             activity_df[('\\', ' ')] = ''
         activity_colsw = [indexw] + colsw_dict[activity] + [3]
@@ -99,17 +98,17 @@ def multi_print(df):
             continue
         else:
             max_colwidth = max_threshold(activity_colsw, WIDTH)
-            with option_context("display.max_colwidth", max_colwidth):
+            with pd.option_context("display.max_colwidth", max_colwidth):
                 print(activity_df)
             print('')
             continue
 
     return None
 
-def subtitle_print(title):
+def subtitle_print(title: str) -> None:
     print(f"\n{'—' * WIDTH}\n\n * {title}\n")
 
-def title_print(title):
+def title_print(title: str) -> None:
     fill = (WIDTH - (len(title) + 2))
     l_delim = fill // 2
     r_delim = l_delim if fill % 2 == 0 else l_delim + 1

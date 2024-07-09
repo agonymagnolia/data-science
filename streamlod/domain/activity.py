@@ -1,6 +1,8 @@
+from typing import Union, Optional, Set
+
 from .identifiable_entity import CulturalHeritageObject
 
-class Activity(object):
+class Activity:
     subclass_order = {
         'Acquisition': 1,
         'Processing': 2,
@@ -13,23 +15,22 @@ class Activity(object):
         self,
         refersTo: CulturalHeritageObject,
         institute: str,
-        person: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        tool: set[str] | None = None
+        person: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        tool: Optional[Set[str]] = None
     ):
         self.institute = institute
         self.person = person
-        # Setting the default value directly as empty set would
-        # share the same set among all the instances of the class
+        # Setting the default value directly as empty set would share the same set among all the instances of the class
         self.tool = set() if tool is None else tool
         self.start = start
         self.end = end
-        # Since the relation is homonymous with the method accessing it,
-        # it is declared as internal and renamed via the property decorator
+        # Since the relation is homonymous with the method accessing it, it is declared as internal
+        # and renamed via the property decorator
         self._refersTo = refersTo
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}('
             f'institute={self.institute!r}, '
@@ -48,10 +49,9 @@ class Activity(object):
         yield "start", self.start
         yield "end", self.end
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if not isinstance(other, self.__class__):
             return False
-        
         return (self.institute == other.institute and
                 self.person == other.person and
                 frozenset(self.tool) == frozenset(other.tool) and
@@ -59,7 +59,7 @@ class Activity(object):
                 self.end == other.end and
                 self._refersTo == other._refersTo)
     
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         if self._refersTo != other._refersTo:
             return self._refersTo < other._refersTo
         else:
@@ -67,7 +67,7 @@ class Activity(object):
             other_rank = self.subclass_order[other.__class__.__name__]
             return self_rank < other_rank
 
-    def __hash__(self):
+    def __hash__(self) -> hash:
         return hash((
             self.institute,
             self.person,
@@ -79,16 +79,16 @@ class Activity(object):
     def getResponsibleInstitute(self) -> str:
         return self.institute
     
-    def getResponsiblePerson(self) -> str | None:
+    def getResponsiblePerson(self) -> Union[str, None]:
         return self.person
     
-    def getTools(self) -> set[str]:
+    def getTools(self) -> Set[str]:
         return self.tool
     
-    def getStartDate(self) -> str | None:
+    def getStartDate(self) -> Union[str, None]:
         return self.start
     
-    def getEndDate(self) -> str | None:
+    def getEndDate(self) -> Union[str, None]:
         return self.end
     
     @property
@@ -106,15 +106,15 @@ class Acquisition(Activity):
         refersTo: CulturalHeritageObject,
         institute: str,
         technique: str,
-        person: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        tool: set[str] | None = None,
+        person: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        tool: Optional[set[str]] = None,
     ):
         super().__init__(refersTo, institute, person, start, end, tool)
         self.technique = technique
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f'Acquisition('
             f'institute={self.institute!r}, '
@@ -135,19 +135,11 @@ class Acquisition(Activity):
         yield "start", self.start
         yield "end", self.end
 
-    def __eq__(self, other):
-        if not isinstance(other, Acquisition):
-            return False
-        
-        return (self.institute == other.institute and
-                self.person == other.person and
-                self.technique == self.technique and
-                frozenset(self.tool) == frozenset(other.tool) and
-                self.start == other.start and
-                self.end == other.end and
-                self._refersTo == other._refersTo)
+    def __eq__(self, other) -> bool:
+        return (super().__eq__(other) and
+                self.technique == self.technique)
 
-    def __hash__(self):
+    def __hash__(self) -> hash:
         return hash((
             self.institute,
             self.person,

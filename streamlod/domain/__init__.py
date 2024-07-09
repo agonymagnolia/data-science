@@ -22,3 +22,25 @@ from .activity import (
     Optimising,
     Exporting
 )
+
+__ALL__ = [
+    'IdentifiableEntity',
+    'Person',
+    'CulturalHeritageObject',
+    'NauticalChart',
+    'ManuscriptPlate',
+    'ManuscriptVolume',
+    'PrintedVolume',
+    'PrintedMaterial',
+    'Herbarium',
+    'Specimen',
+    'Painting',
+    'Model',
+    'Map',
+    'Activity',
+    'Acquisition',
+    'Processing',
+    'Modelling',
+    'Optimising',
+    'Exporting'
+]
