@@ -199,20 +199,51 @@ class BasicMashup:
         df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
         return self._to_activity(df)
 
-    def getActivitiesByResponsibleInstitution(self, partialName: str) -> list[Activity]: # Lin
-        pass
+def getActivitiesByResponsibleInstitution(self, partialName: str) -> list[Activity]: # Lin
+        try:
+            df = concat(handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
+    
 
     def getActivitiesByResponsiblePerson(self, partialName: str) -> list[Activity]: # Lin
-        pass
+        try:
+            df = concat(handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
 
     def getActivitiesUsingTool(self, partialName: str) -> list[Activity]: # Lin
-        pass
+        try:
+            df = concat(handler.getActivitiesUsingTool(partialName) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
 
     def getActivitiesStartedAfter(self, date: str) -> list[Activity]: # Lin
-        pass
+        try:
+            df = concat(handler.getActivitiesStartedAfter(date) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
 
     def getActivitiesEndedBefore(self, date:str) -> list[Activity]: # Lin
-        pass
+        try:
+            df = concat(handler.getActivitiesEndedBefore(date) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
 
     def getAcquisitionsByTechnique(self, partialName: str) -> list[Acquisition]: # Lin
-        pass
+        try:
+            df = concat(handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery)
+        except ValueError:
+            return list()
+        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        return self._to_activity(df)
