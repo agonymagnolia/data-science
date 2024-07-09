@@ -1,18 +1,16 @@
 from typing import List
-from sparql_dataframe import get
 import pandas as pd
-
 from .basic_mashup import BasicMashup
 from ..domain import Person, CulturalHeritageObject, Activity
 
-class AdvancedMashup(BasicMashup): # Lin
+class AdvancedMashup(BasicMashup):
     """
     The AdvancedMashup class handles two-way filter queries to multiple graph or relational databases
     and integrates the data into unified Python objects.
     """
-class AdvancedMashup(BasicMashup): # Lin
-    def getActivitiesOnObjectsAuthoredBy(self, personId: str) -> list[Activity]:
-         # Get objects authored by the person
+    
+    def getActivitiesOnObjectsAuthoredBy(self, personId: str) -> List[Activity]:
+        # Get objects authored by the person
         objects = self.getCulturalHeritageObjectsAuthoredBy(personId)
         # Get activities on these objects
         object_ids = [obj.getId() for obj in objects]
@@ -23,33 +21,33 @@ class AdvancedMashup(BasicMashup): # Lin
         except ValueError:
             return list()
 
-    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
+    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> List[CulturalHeritageObject]:
         try:
-            df_list = [handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery]
-            df = pd.concat(df_list)
+            ids_set = set()
+            for handler in self.processQuery:
+                ids = handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE person LIKE '%{partialName}%'")
+                ids_set.update(ids)
+            return self.getCulturalHeritageObjectsByIds(list(ids_set))
         except ValueError:
             return list()
-        
-        #df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
-        #return self.toCHO(df)
 
-    def getObjectsHandledByResponsibleInstitution(self, partialName: str) -> list[CulturalHeritageObject]:
+    def getObjectsHandledByResponsibleInstitution(self, partialName: str) -> List[CulturalHeritageObject]:
         try:
-            df_list = [handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery]
-            df = pd.concat(df_list)
+            ids_set = set()
+            for handler in self.processQuery:
+                ids = handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE institute LIKE '%{partialName}%'")
+                ids_set.update(ids)
+            return self.getCulturalHeritageObjectsByIds(list(ids_set))
         except ValueError:
             return list()
-        
-        #df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
-        #return self.toCHO(df)
 
-    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
-        #try:
-        #    df_list = [handler.getActivitiesStartedAfter(start) & handler.getActivitiesEndedBefore(end) for handler in self.processQuery]
-        #    df = pd.concat(df_list)
-        #except ValueError:
-        #    return list()
-        
-        #df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
-        #return self.toPerson(df)
-        pass
+    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> List[Person]:
+        try:
+            ids_set = set()
+            for handler in self.processQuery:
+                start_ids = set(handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE start >= '{start}'"))
+                end_ids = set(handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE end <= '{end}'"))
+                ids_set.update(start_ids.intersection(end_ids))
+            return self.getAuthorsOfCulturalHeritageObject(list(ids_set))
+        except ValueError:
+            return list()
