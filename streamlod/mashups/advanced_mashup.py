@@ -15,32 +15,37 @@ class AdvancedMashup(BasicMashup): # Lin
         # Get activities on these objects
         object_ids = [obj.getId() for obj in objects]
         try:
-            df = concat(handler.getById(object_ids) for handler in self.processQuery)
+            df_list = [handler.getById(object_ids) for handler in self.processQuery]
+            df = pd.concat(df_list)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
-        return self._to_activity(df)
 
     def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
         try:
-            df = concat(handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery)
+            df_list = [handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery]
+            df = pd.concat(df_list)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        
+        df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
         return self._to_cho(df)
 
     def getObjectsHandledByResponsibleInstitution(self, partialName: str) -> list[CulturalHeritageObject]:
         try:
-            df = concat(handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery)
+            df_list = [handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery]
+            df = pd.concat(df_list)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        
+        df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
         return self._to_cho(df)
 
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
         try:
-            df = concat(handler.getActivitiesStartedAfter(start) & handler.getActivitiesEndedBefore(end) for handler in self.processQuery)
+            df_list = [handler.getActivitiesStartedAfter(start) & handler.getActivitiesEndedBefore(end) for handler in self.processQuery]
+            df = pd.concat(df_list)
         except ValueError:
             return list()
-        df = df[~df.index.duplicated()].sort_index(key=lambda x: x.map(key))
+        
+        df = df.drop_duplicates().sort_index(key=lambda x: x.map(key))
         return self._to_person(df)
