@@ -38,11 +38,11 @@ class AdvancedMashup(BasicMashup):
             ids = handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE institute LIKE '%{partialName}%'")
             ids_set.update(ids)
         return self.getCulturalHeritageObjectsByIds(list(ids_set))[0]
-
+    
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> List[Person]:
         ids_set = set()
         for handler in self.processQuery:
-            ids = handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE start >= '{start}' AND end <= '{end}'")
+            ids = handler.queryAttribute(attribute='refersTo', filter_condition=f"WHERE start >= '{start}' AND end <= '{end}'", activity_list=['Acquisition'])
             ids_set.update(ids)
 
         authors: Set[Person] = set()
