@@ -1,49 +1,46 @@
-from typing import Union, List, Set, Generator, Mapping
+from typing import Union, List, Set, Generator
 import pandas as pd
-import numpy as np
-from rdflib.graph import Graph
-from rdflib.term import URIRef, Literal
 from rdflib.namespace import Namespace, DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
+from urllib.parse import quote_plus
 from urllib.error import URLError
 from sparql_dataframe import get
-import builtins
-import rdflib.namespace
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
-from streamlod.utils import chunker, id_join, key
+from streamlod.utils import id_join, key
 
+# Namespaces
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
 LOC = Namespace('https://agonymagnolia.github.io/data-science#') # This is the local namespace
 
 """
-Attribute mapping
+Attribute mappings
  Keys: Attribute names in CSV order
  Values: 
-  0. Attribute order for output DataFrame and object init
+  0. Attribute order for output DataFrame and object initialization
   1. Required
-  2. Separator if multiple else ""
+  2. Separator if multiple
   3. RDF Predicate
   4. Value type (if relation, 0. Subentity, 1. Regex pattern)
 """
 
 CHO_ATTRIBUTES = {
-    'identifier': (1, True, '', DC.identifier, ''),
-    'class': (0, True, '', RDF.type, LOC),
-    'title': (2, True, '', DC.title, ''),
-    'date': (5, False, '', DC.date, ''),
-    'hasAuthor': (6, False, '; ', DC.creator, ('Person', r"^(?P<name>.+?)\s*?\((?P<identifier>\w+\:\w+)\)$")),
-    'owner': (3, True, '', EDM.currentLocation, ''),
-    'place': (4, True, '', DC.coverage, '')
+    'identifier': (1, True, None, DC.identifier, ''),
+    'class': (0, True, None, RDF.type, LOC),
+    'title': (2, True, None, DC.title, ''),
+    'date': (5, False, None, DC.date, ''),
+    'hasAuthor': (6, False, '; ', DC.creator, ('Person', r"^(?P<name>.+?)\s*?\(\s*(?P<identifier>.+?)\s*\)\s*$")),
+    'owner': (3, True, None, EDM.currentLocation, ''),
+    'place': (4, True, None, DC.coverage, '')
 }
 
 PERSON_ATTRIBUTES = {
-    'identifier': (7, True, '', DC.identifier, ''),
-    'name': (8, True, '', FOAF.name, '')
+    'identifier': (7, True, None, DC.identifier, ''),
+    'name': (8, True, None, FOAF.name, '')
 }
 
 """
-Entity mapping
+Entity mappings
  Keys: internalId prefix
  Values:
   0. Entity class or superclass
@@ -76,6 +73,7 @@ OBJECT_QUERY = """
                         foaf:name ?author_name .
         }
     """
+
 PERSON_QUERY = """
     PREFIX dc: <http://purl.org/dc/elements/1.1/>
     PREFIX edm: <http://www.europeana.eu/schemas/edm/>
@@ -88,10 +86,8 @@ PERSON_QUERY = """
                     foaf:name ?name ;
     """
 
-
 class MetadataUploadHandler(UploadHandler): # Francesca
-    # Dictionary to map csv values to data model classes is set as a class
-    # variable (shared among all the instances of MetadataUploadHandler)
+    # Mapping of csv values to data model classes
     _csv_map = {
             'Nautical chart': 'NauticalChart',
             'Manuscript plate': 'ManuscriptPlate',
@@ -106,15 +102,10 @@ class MetadataUploadHandler(UploadHandler): # Francesca
         }
 
     def __init__(self):
-        # The store configuration is initialised as an instance variable,
-        # each MetadataUploadHandler instance has its own store
         super().__init__()
-
-        # ! Database connection only on commit !
-        self.store = SPARQLUpdateStore(autocommit=False, context_aware=False)
-        self.store.setTimeout(60)
+        self.store = SPARQLUpdateStore(autocommit=False, context_aware=False) # Database connection only on commit
         self.store.method = 'POST'
-        self.identifiers: Set[str] = set() # Set of entity IDs inside the database
+        self.identifiers: Set[str] = set()
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
         if not super().setDbPathOrUrl(newDbPathOrUrl):
@@ -133,48 +124,85 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             print(e)
             return False
 
-    def _to_rdf(self, array: np.ndarray, graph: Graph) -> None:
+    def _validateDF(self, df: pd.DataFrame, entity: str, to_validate: List[str]) -> pd.DataFrame:
+        """
+        Preprocesses the input DataFrame:
+        1. Strips leading and trailing whitespace from all columns.
+        2. Filters out rows with identifiers that already exist in the database or are duplicated within the DataFrame.
+        3. Conforms the 'class' column to a controlled vocabulary.
+        4. Drops rows that do not comply with the required attributes defined in the entity's attribute mapping.
+        5. Sets the DataFrame index to the URI (entity type + identifier).
+        """
+        for col in df: 
+            df[col] = df[col].str.strip() # Trim spaces in every column
 
-        for row in array:
-            subject = LOC['CHO-' + row[0]]
+        # Drop entities already in database or duplicated
+        df = df[~df.identifier.isin(self.identifiers) & ~df.duplicated('identifier')]
 
-            graph.add((subject, DC.identifier, Literal(row[0])))
-            graph.add((subject, RDF.type, LOC[row[1]]))
-            graph.add((subject, DC.title, Literal(row[2])))
-            graph.add((subject, EDM.currentLocation, Literal(row[5])))
-            graph.add((subject, DC.coverage, Literal(row[6])))
+        if df.empty:
+            return df
 
-            if row[3]:
-                graph.add((subject, DC.date, Literal(row[3])))
+        self.identifiers.update(df.identifier)
 
-            if row[4]:
-                for author_str in row[4].split('; '):
-                    try:
-                        i = author_str.index('(')
-                    except ValueError:
-                        continue
+        if 'class' in df:
+            # Change values based on the corresponding entries of a dictionary, others are turned to NaN
+            df.loc[:, 'class'] = df['class'].map(self._csv_map)
 
-                    name, identifier = author_str[:i-1], author_str[i+1:-1]
+        # Drop entities non compliant to the data model
+        df = df[df[to_validate].notna().all(axis=1)]
 
-                    if not name or not identifier:
-                        continue
+        df.index = (f'{entity}-' + df.identifier).map(lambda x: LOC[quote_plus(x)].n3())
 
-                    author = LOC['Person-' + identifier]
+        return df
 
-                    if identifier not in self.identifiers:
-                        self.identifiers.add(identifier)
-                        graph.add((author, RDF.type, EDM.Agent))
-                        graph.add((author, DC.identifier, Literal(identifier)))
-                        graph.add((author, FOAF.name, Literal(name)))
-                    
-                    graph.add((subject, DC.creator, author))
+    def toRDF(self, df: pd.DataFrame, entity: str = 'CHO') -> Generator[str, None, None]:
+        """
+        Maps the validated DataFrame to RDF triples via an IdentifiableEntity mapping dictionary:
+        1. Generates RDF type triples for the class or its subclasses.
+        2. Maps every attribute of the class to the corresponding DataFrame column, RDF predicate and value type (Literal, external URI or internal relation).
+        3. Traverse vertically each column, linking indexed subjects to single or multiple values via the related predicate.
+        3. Recursively handles nested relation entities.
 
+        Returns a generator that yields RDF triples as strings.
+        """
+        entity_type, mapping = IDENTIFIABLE_ENTITIES[entity]
+        to_validate = [attr for attr, specs in mapping.items() if specs[1]]
+        df = self._validateDF(df, entity, to_validate)
+
+        if 'class' in mapping:
+            for class_name in df['class'].unique():
+                yield f'<{LOC[class_name]}> <{RDFS.subClassOf}> <{entity_type}> .'
+        else:
+            for subject in df.index:
+                yield f'{subject} <{RDF.type}> <{entity_type}> .'
+
+        for attr, (_, _, sep, predicate, value_type) in mapping.items():
+            # Dropna can be safely performed because required attribute columns were already validated.
+            # Alignment is guaranteed by the Series index (the URI).
+            if sep:
+                col = df[attr].str.split(sep).explode().dropna()
+            else:
+                col = df[attr].dropna()
+
+            if isinstance(value_type, Namespace):
+                for subject, obj in zip(col.index, col.to_list()):
+                    yield f'{subject} <{predicate}> <{value_type[obj]}> .'
+
+            elif isinstance(value_type, tuple):
+                rel_entity, regex = value_type
+                rel_df = col.str.extract(regex).dropna(subset='identifier')
+                yield from self.toRDF(rel_df, rel_entity)
+
+                for subject, rel_id in zip(rel_df.index, rel_df.identifier.to_list()):
+                    yield f'{subject} <{predicate}> <{LOC[f"{rel_entity}-" + quote_plus(rel_id)]}> .'
+
+            else:
+                for subject, obj in zip(col.index, col.to_list()):
+                    yield f'{subject} <{predicate}> "{obj}" .'
 
     def pushDataToDb(self, path: str) -> bool:
         endpoint = self.getDbPathOrUrl()
-        # Link graph to store to commit directly the triples to the database
         store = self.store
-        graph = Graph(store)
 
         df = pd.read_csv(
             path,
@@ -185,76 +213,9 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             engine='c',
             memory_map=True,
         )
+        # It's not meant to be done in this way, but it's beautiful
+        store._transaction().append(f'INSERT DATA {{ {" ".join(self.toRDF(df))} }}')
 
-        def clean(df: pd.DataFrame, entity: str = 'CHO') -> pd.DataFrame:
-            mapping = IDENTIFIABLE_ENTITIES[entity][1]
-            for col in df: 
-                df[col] = df[col].str.strip() # trim spaces in every column
-
-            # Drop entities already in database or duplicated
-            df = df[~df['identifier'].isin(self.identifiers) & ~df.duplicated('identifier')]
-
-            if df.empty:
-                return df
-
-            self.identifiers.update(df['identifier'])
-
-            if 'class' in df:
-                # Change corresponding entries in 'class' based on dictionary, others are turned to NaN
-                df.loc[:, 'class'] = df['class'].map(self._csv_map)
-
-            # Drop every entity non compliant to the data model
-            validate = [attr for attr, required in mapping.items() if required[1]]
-            df = df[df[validate].notna().all(axis=1)]
-
-            df.index = f'{entity}-' + df['identifier']
-            return df
-
-        def mapper(df: pd.DataFrame, entity: str = 'CHO') -> Generator:
-            df = clean(df, entity)
-            entity_type, mapping = IDENTIFIABLE_ENTITIES[entity]
-            if 'class' in mapping:
-                for class_name in df['class'].unique():
-                    yield f'<{LOC[class_name]}> <{RDFS.subClassOf}> <{entity_type}> .'
-            else:
-                for subject in df.index:
-                    yield f'<{LOC[subject]}> <{RDF.type}> <{entity_type}> .'
-
-            for attr, (_, required, sep, predicate, value_type) in mapping.items():
-                col = df[attr]
-                match type(value_type):
-                    case rdflib.namespace.Namespace:
-                        if sep:
-                            col = col.str.split(sep).explode()
-                        if required:
-                            for subject, obj in zip(df.index, col):
-                                yield f'<{LOC[subject]}> <{predicate}> <{value_type[obj]}> .'
-                        else:
-                            for subject, obj in zip(df.index, col):
-                                if pd.notna(obj):
-                                    yield f'<{LOC[subject]}> <{predicate}> <{value_type[obj]}> .'
-                    case builtins.tuple:
-                        if sep:
-                            col = col.str.split(sep).explode()
-                        subentity, regex = value_type
-                        subdf = col.str.extract(regex)
-                        yield from mapper(subdf, subentity)
-                        for subject, subid in zip(subdf.index, subdf['identifier']):
-                            if pd.notna(subid):
-                                yield f'<{LOC[subject]}> <{predicate}> <{LOC[f"{subentity}-" + subid]}> .'
-                    case _:
-                        if sep:
-                            col = col.str.split(sep).explode()
-                        if required:
-                            for subject, obj in zip(df.index, col):
-                                yield f'<{LOC[subject]}> <{predicate}> "{obj}" .'
-                        else:
-                            for subject, obj in zip(df.index, col):
-                                if pd.notna(obj):
-                                    yield f'<{LOC[subject]}> <{predicate}> "{obj}" .'
-
-
-        store._transaction().append(f'INSERT DATA {{ {" ".join(mapper(df))} }}')
         try:
             store.open((endpoint, endpoint))
             store.commit()

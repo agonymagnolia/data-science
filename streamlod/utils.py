@@ -1,13 +1,6 @@
-from typing import Union, List, Generator
-import numpy as np
+from typing import Union, List
 
-def chunker(array: np.ndarray, size: int) -> Generator[np.ndarray, None, None]:
-    """
-    Split an array into chunks of a specified size (the step of the range).
-    """
-    return (array[pos:pos + size] for pos in range(0, len(array), size))
-
-def id_join(identifiers: Union[str, int, List[str]], join_char: str = ' '):
+def id_join(identifiers: Union[str, int, List[str]], join_char: str = ' ') -> str:
     """
     Normalize input identifiers (strings or lists) into a joined string for queries.
     """
@@ -16,7 +9,7 @@ def id_join(identifiers: Union[str, int, List[str]], join_char: str = ' '):
     else:
         return join_char.join(f'"{identifier}"' for identifier in identifiers)
 
-def key(val):
+def key(val: str) -> tuple[int, Union[int, str]]:
     """
     Provides a custom sorting key for alphanumeric string identifiers.
     For numeric values returns a tuple (0, int(val)).

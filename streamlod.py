@@ -130,9 +130,9 @@ subtitle_print('Activities by person Emily Bronte:')
 multi_print(process_qh.getActivitiesByResponsiblePerson('y B'))
 rich_print(mashup.getActivitiesByResponsiblePerson('y B'))
 
-subtitle_print('Activities with tool lab:')
-multi_print(process_qh.getActivitiesUsingTool('lab'))
-rich_print(mashup.getActivitiesUsingTool('lab'))
+subtitle_print('Activities with tool "lab-":')
+multi_print(process_qh.getActivitiesUsingTool('lab-'))
+rich_print(mashup.getActivitiesUsingTool('lab-'))
 
 subtitle_print('Activities started after 24th October 2023:')
 multi_print(process_qh.getActivitiesStartedAfter('2023-10-24'))
@@ -142,9 +142,9 @@ subtitle_print('Activities ended before 3rd March 2023:')
 multi_print(process_qh.getActivitiesEndedBefore('2023-03-10'))
 rich_print(mashup.getActivitiesEndedBefore('2023-03-10'))
 
-subtitle_print('Acquisitons with technique scanner:')
-multi_print(process_qh.getAcquisitionsByTechnique('light'))
-rich_print(mashup.getAcquisitionsByTechnique('light'))
+subtitle_print('Acquisitons with technique "3d":')
+multi_print(process_qh.getAcquisitionsByTechnique('3d'))
+rich_print(mashup.getAcquisitionsByTechnique('3d'))
 
 
 title_print('ADVANCED MASHUP')
