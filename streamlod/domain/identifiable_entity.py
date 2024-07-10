@@ -1,6 +1,6 @@
 from typing import Union, Optional, List
 
-from ..utils import key
+from streamlod.utils import key
 
 class IdentifiableEntity:
     def __init__(self, identifier: str):
@@ -34,7 +34,7 @@ class Person(IdentifiableEntity):
     def __lt__(self, other) -> bool:
         return self.name < other.name
 
-    def __hash__(self) -> hash:
+    def __hash__(self):
         return hash((self.identifier, self.name))
 
     def getName(self) -> str:
@@ -90,7 +90,7 @@ class CulturalHeritageObject(IdentifiableEntity):
         # Numeric and alphabetic identifiers are placed respecitvely in a 0 or 1 tuple to allow for comparison
         return key(self.identifier) < key(other.identifier)
 
-    def __hash__(self) -> hash:
+    def __hash__(self):
         return hash((
             self.identifier,
             self.title,

@@ -1,2 +1,2 @@
-from .basic_mashup import BasicMashup
-from .advanced_mashup import AdvancedMashup
+from streamlod.mashups.basic_mashup import BasicMashup
+from streamlod.mashups.advanced_mashup import AdvancedMashup

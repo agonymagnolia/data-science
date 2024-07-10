@@ -1,6 +1,6 @@
 from typing import Union, Optional, Set
 
-from .identifiable_entity import CulturalHeritageObject
+from streamlod.domain.identifiable_entity import CulturalHeritageObject
 
 class Activity:
     subclass_order = {
@@ -67,7 +67,7 @@ class Activity:
             other_rank = self.subclass_order[other.__class__.__name__]
             return self_rank < other_rank
 
-    def __hash__(self) -> hash:
+    def __hash__(self):
         return hash((
             self.institute,
             self.person,
@@ -139,7 +139,7 @@ class Acquisition(Activity):
         return (super().__eq__(other) and
                 self.technique == self.technique)
 
-    def __hash__(self) -> hash:
+    def __hash__(self):
         return hash((
             self.institute,
             self.person,

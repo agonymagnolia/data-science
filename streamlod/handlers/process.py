@@ -1,10 +1,10 @@
-from typing import Union, Any, List, Dict
+from typing import Union, Any, List, Dict, Set, Mapping, Iterable
 import pandas as pd
 import json
 import sqlite3
 
-from .base import UploadHandler, QueryHandler
-from ..utils import key, id_join
+from streamlod.handlers.base import UploadHandler, QueryHandler
+from streamlod.utils import key, id_join
 
 ACTIVITY_ATTRIBUTES = { # Attribute : required
     'refersTo': True,
@@ -85,9 +85,9 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
 
         # Flatten the JSON document into a DataFrame
         df = pd.json_normalize(json_doc)
-        df['internalId'] = df['object id']  # Copy object id to internalId for activity identification
+        df['internalId'] = df.iloc[:, 0]  # Copy object id to internalId for activity identification
 
-        activities, tools = dict(), pd.DataFrame()  # Initialize storage for activities and tools
+        activities, tools = {}, pd.DataFrame()  # Initialize storage for activities and tools
 
         # Process each activity
         for name, attrs in ACTIVITIES.items():
@@ -108,8 +108,6 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
 
             # Filter out activity instances already in the database
             activity = activity[~activity['internalId'].isin(self.identifiers)]
-            if activity.empty:
-                continue
 
             self.identifiers.update(activity['internalId'])  # Update existing activities set
 
@@ -117,6 +115,9 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             validate = [attr for attr, required in attrs.items() if required]
             activity.replace(r'', pd.NA, inplace=True)
             activity = activity[activity[validate].notna().all(axis=1)]
+
+            if activity.empty:
+                continue
 
             activities[name] = activity  # Store valid activities DataFrame linked to activity name
 
@@ -143,7 +144,7 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
 
     def queryAttribute(
         self,
-        activity_list: Union[List[str], Dict[str, Any]] = ACTIVITIES,
+        activity_list: Iterable[str] = ACTIVITIES,
         attribute: str = 'refersTo',
         filter_condition: str = ''
     ) -> List[Any]:
@@ -167,7 +168,7 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
 
     def queryAttributes(
         self,
-        activity_dict: Dict[str, Union[List[str], Dict[str, Any]]] = ACTIVITIES,
+        activity_dict: Mapping[str, Iterable[str]] = ACTIVITIES,
         filter_condition: str = ''
     ) -> pd.DataFrame:
         activities = {}
@@ -200,7 +201,7 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
 
         # Concatenate activity DataFrames sorting alphanumerically the index
         return pd.concat(activities.values(), axis=1, join='outer', keys=activities.keys()) \
-              .sort_index(key=lambda x: x.map(key))
+                 .sort_index(key=lambda x: x.map(key))
 
     def getById(self, identifiers: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string

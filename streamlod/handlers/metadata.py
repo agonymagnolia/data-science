@@ -1,4 +1,4 @@
-from typing import Union, List, Set
+from typing import Union, List, Set, Generator, Mapping
 import pandas as pd
 import numpy as np
 from rdflib.graph import Graph
@@ -7,22 +7,53 @@ from rdflib.namespace import Namespace, DC, FOAF, RDF, RDFS
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from urllib.error import URLError
 from sparql_dataframe import get
+import builtins
+import rdflib.namespace
 
-from .base import UploadHandler, QueryHandler
-from ..utils import chunker, id_join, key
-
-CHO_ATTRIBUTES = { # Attribute : required
-    'identifier': True,
-    'className': True,
-    'title': True,
-    'date': False,
-    'hasAuthor': False,
-    'owner': True,
-    'place': True,
-}
+from streamlod.handlers.base import UploadHandler, QueryHandler
+from streamlod.utils import chunker, id_join, key
 
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
-MAG = Namespace('https://agonymagnolia.github.io/data-science#')
+LOC = Namespace('https://agonymagnolia.github.io/data-science#') # This is the local namespace
+
+"""
+Attribute mapping
+ Keys: Attribute names in CSV order
+ Values: 
+  0. Attribute order for output DataFrame and object init
+  1. Required
+  2. Separator if multiple else ""
+  3. RDF Predicate
+  4. Value type (if relation, 0. Subentity, 1. Regex pattern)
+"""
+
+CHO_ATTRIBUTES = {
+    'identifier': (1, True, '', DC.identifier, ''),
+    'class': (0, True, '', RDF.type, LOC),
+    'title': (2, True, '', DC.title, ''),
+    'date': (5, False, '', DC.date, ''),
+    'hasAuthor': (6, False, '; ', DC.creator, ('Person', r"^(?P<name>.+?)\s*?\((?P<identifier>\w+\:\w+)\)$")),
+    'owner': (3, True, '', EDM.currentLocation, ''),
+    'place': (4, True, '', DC.coverage, '')
+}
+
+PERSON_ATTRIBUTES = {
+    'identifier': (7, True, '', DC.identifier, ''),
+    'name': (8, True, '', FOAF.name, '')
+}
+
+"""
+Entity mapping
+ Keys: internalId prefix
+ Values:
+  0. Entity class or superclass
+  1. Attribute mapping
+"""
+
+IDENTIFIABLE_ENTITIES = {
+    'CHO': (EDM.PhysicalThing, CHO_ATTRIBUTES),
+    'Person': (EDM.Agent, PERSON_ATTRIBUTES), 
+}
 
 OBJECT_QUERY = """
     PREFIX dc: <http://purl.org/dc/elements/1.1/>
@@ -103,11 +134,12 @@ class MetadataUploadHandler(UploadHandler): # Francesca
             return False
 
     def _to_rdf(self, array: np.ndarray, graph: Graph) -> None:
+
         for row in array:
-            subject = MAG['CHO-' + row[0]]
+            subject = LOC['CHO-' + row[0]]
 
             graph.add((subject, DC.identifier, Literal(row[0])))
-            graph.add((subject, RDF.type, MAG[row[1]]))
+            graph.add((subject, RDF.type, LOC[row[1]]))
             graph.add((subject, DC.title, Literal(row[2])))
             graph.add((subject, EDM.currentLocation, Literal(row[5])))
             graph.add((subject, DC.coverage, Literal(row[6])))
@@ -127,7 +159,7 @@ class MetadataUploadHandler(UploadHandler): # Francesca
                     if not name or not identifier:
                         continue
 
-                    author = MAG['Person-' + identifier]
+                    author = LOC['Person-' + identifier]
 
                     if identifier not in self.identifiers:
                         self.identifiers.add(identifier)
@@ -140,69 +172,105 @@ class MetadataUploadHandler(UploadHandler): # Francesca
 
     def pushDataToDb(self, path: str) -> bool:
         endpoint = self.getDbPathOrUrl()
-        store = self.store
         # Link graph to store to commit directly the triples to the database
+        store = self.store
         graph = Graph(store)
 
         df = pd.read_csv(
             path,
             header=0,
-            names=CHO_ATTRIBUTES,
+            names=list(CHO_ATTRIBUTES),
             dtype='string',
             on_bad_lines='skip',
             engine='c',
             memory_map=True,
         )
 
-        for col in df: 
-            df[col] = df[col].str.strip() # trim spaces in every column
+        def clean(df: pd.DataFrame, entity: str = 'CHO') -> pd.DataFrame:
+            mapping = IDENTIFIABLE_ENTITIES[entity][1]
+            for col in df: 
+                df[col] = df[col].str.strip() # trim spaces in every column
 
-        # Drop entities already in database or duplicated
-        df = df[~df['identifier'].isin(self.identifiers) & ~df.duplicated('identifier')]
+            # Drop entities already in database or duplicated
+            df = df[~df['identifier'].isin(self.identifiers) & ~df.duplicated('identifier')]
 
-        if df.empty:
+            if df.empty:
+                return df
+
+            self.identifiers.update(df['identifier'])
+
+            if 'class' in df:
+                # Change corresponding entries in 'class' based on dictionary, others are turned to NaN
+                df.loc[:, 'class'] = df['class'].map(self._csv_map)
+
+            # Drop every entity non compliant to the data model
+            validate = [attr for attr, required in mapping.items() if required[1]]
+            df = df[df[validate].notna().all(axis=1)]
+
+            df.index = f'{entity}-' + df['identifier']
+            return df
+
+        def mapper(df: pd.DataFrame, entity: str = 'CHO') -> Generator:
+            df = clean(df, entity)
+            entity_type, mapping = IDENTIFIABLE_ENTITIES[entity]
+            if 'class' in mapping:
+                for class_name in df['class'].unique():
+                    yield f'<{LOC[class_name]}> <{RDFS.subClassOf}> <{entity_type}> .'
+            else:
+                for subject in df.index:
+                    yield f'<{LOC[subject]}> <{RDF.type}> <{entity_type}> .'
+
+            for attr, (_, required, sep, predicate, value_type) in mapping.items():
+                col = df[attr]
+                match type(value_type):
+                    case rdflib.namespace.Namespace:
+                        if sep:
+                            col = col.str.split(sep).explode()
+                        if required:
+                            for subject, obj in zip(df.index, col):
+                                yield f'<{LOC[subject]}> <{predicate}> <{value_type[obj]}> .'
+                        else:
+                            for subject, obj in zip(df.index, col):
+                                if pd.notna(obj):
+                                    yield f'<{LOC[subject]}> <{predicate}> <{value_type[obj]}> .'
+                    case builtins.tuple:
+                        if sep:
+                            col = col.str.split(sep).explode()
+                        subentity, regex = value_type
+                        subdf = col.str.extract(regex)
+                        yield from mapper(subdf, subentity)
+                        for subject, subid in zip(subdf.index, subdf['identifier']):
+                            if pd.notna(subid):
+                                yield f'<{LOC[subject]}> <{predicate}> <{LOC[f"{subentity}-" + subid]}> .'
+                    case _:
+                        if sep:
+                            col = col.str.split(sep).explode()
+                        if required:
+                            for subject, obj in zip(df.index, col):
+                                yield f'<{LOC[subject]}> <{predicate}> "{obj}" .'
+                        else:
+                            for subject, obj in zip(df.index, col):
+                                if pd.notna(obj):
+                                    yield f'<{LOC[subject]}> <{predicate}> "{obj}" .'
+
+
+        store._transaction().append(f'INSERT DATA {{ {" ".join(mapper(df))} }}')
+        try:
+            store.open((endpoint, endpoint))
+            store.commit()
+            store.close()
             return True
-
-        self.identifiers.update(df['identifier'])
-
-        # Change corresponding entries based on dictionary, others are
-        # turned to NaN
-        df.className = df.className.map(self._csv_map)
-
-        # Drop every entity non compliant to the data model
-        validate = [attr for attr, required in CHO_ATTRIBUTES.items() if required]
-        df = df[df[validate].notna().all(axis=1)]
-
-        for class_name in df.className.unique():
-            graph.add((MAG[class_name], RDFS.subClassOf, EDM.PhysicalThing))
-
-        # Convert DataFrame to numpy ndarray for better performance
-        array = df.to_numpy(dtype=str, na_value='')
-
-        # Commit array data in chunks to prevent reaching HTTP request size limit
-        commits = list()
-        for chunk in chunker(array, 300):
-            self._to_rdf(chunk, graph)
-
-            try:
-                store.open((endpoint, endpoint))
-                store.commit()
-                store.close()
-                commits.append(True)
-            except URLError as e:
-                print(e)
-                store.rollback()
-                commits.append(False)
-
-        return all(commits)
+        except URLError as e:
+            print(e)
+            store.rollback()
+            return False
 
 
 class MetadataQueryHandler(QueryHandler):
     def getById(self, identifiers: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string
         identifiers = id_join(identifiers)
-        # Construct values clause for SPARQL query, specifying identifiers
-        # as parameters
+        # Construct values clause for SPARQL query, specifying identifiers as parameters
         value_clause = f"""
         VALUES ?identifier {{ {identifiers} }}
     }}
@@ -213,16 +281,14 @@ class MetadataQueryHandler(QueryHandler):
         query = OBJECT_QUERY + value_clause
         df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
 
-        # If the object query found nothing, retry looking for people with
-        # the same value clause
+        # If the object query found nothing, retry looking for people with the same value clause
         if df.empty:
             query = PERSON_QUERY + value_clause
             df = get(endpoint, query, True).astype('string').sort_values(by='name', ignore_index=True)
 
-        # If the object query was successful, remove personal namespace URL
-        # from class entities
+        # If the object query was successful, remove personal namespace URL from class entities
         else:
-            df['class'] = df['class'].str.replace(str(MAG), '')
+            df['class'] = df['class'].str.replace(str(LOC), '')
 
         return df
 
@@ -239,7 +305,7 @@ class MetadataQueryHandler(QueryHandler):
         df = get(self.getDbPathOrUrl(), query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
-        df['class'] = df['class'].str.replace(str(MAG), '')
+        df['class'] = df['class'].str.replace(str(LOC), '')
 
         return df
 
@@ -279,6 +345,6 @@ class MetadataQueryHandler(QueryHandler):
         df = get(self.getDbPathOrUrl(), query, True) \
             .astype('string') \
             .sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
-        df['class'] = df['class'].str.replace(str(MAG), '')
+        df['class'] = df['class'].str.replace(str(LOC), '')
 
         return df

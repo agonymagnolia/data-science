@@ -1,15 +1,15 @@
-from typing import Union, List, Tuple, Set
+from typing import Union, List, Set, Iterable
 import pandas as pd
 
-from ..handlers import MetadataQueryHandler, ProcessDataQueryHandler, ACTIVITIES
-from ..domain import (
+from streamlod.handlers import MetadataQueryHandler, ProcessDataQueryHandler, ACTIVITIES
+from streamlod.domain import (
     IdentifiableEntity,
     Person,
     CulturalHeritageObject,
     Activity,
     Acquisition
 )
-from ..utils import key
+from streamlod.utils import key
 import streamlod.domain as domain
 
 class BasicMashup:
@@ -44,7 +44,7 @@ class BasicMashup:
         self.processQuery.append(handler)
         return True
 
-    def normalizeDFs(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]], object_class: str) -> pd.DataFrame:
+    def _normalizeDFs(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]], object_class: str) -> pd.DataFrame:
         """
         Normalize input DataFrame or list of DataFrames.
 
@@ -59,11 +59,11 @@ class BasicMashup:
             elif len(non_empty_dfs) == 1:
                 return non_empty_dfs[0]
             else:
-                return self.concatDedupSort(non_empty_dfs, object_class)
+                return self._concatDedupSort(non_empty_dfs, object_class)
         else:
             return dfs
 
-    def concatDedupSort(self, dfs: List[pd.DataFrame], object_class: str) -> pd.DataFrame:
+    def _concatDedupSort(self, dfs: List[pd.DataFrame], object_class: str) -> pd.DataFrame:
         """
         Concatenate DataFrames, remove duplicates, and sort based on the object class.
         """
@@ -83,27 +83,19 @@ class BasicMashup:
         """
         Convert DataFrame(s) into a list of Person objects.
         """
-        result = []
-        df = self.normalizeDFs(dfs, 'Person')
-
-        if df.empty:
-            return result
+        if (df := self._normalizeDFs(dfs, 'Person')).empty:
+            return []
 
         # Create Person objects from DataFrame rows
-        for row in df.to_numpy(dtype=object, na_value=None):
-            result.append(Person(*row))
-
-        return result
+        return [Person(*row) for row in df.to_numpy(dtype=object, na_value=None)]
 
     def toCHO(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[CulturalHeritageObject]:
         """
         Convert DataFrame(s) into a list of CulturalHeritageObjects.
         """
-        result = []
-        df = self.normalizeDFs(dfs, 'CulturalHeritageObject')
-
-        if df.empty:
-            return result
+        result: List[CulturalHeritageObject] = []
+        if (df := self._normalizeDFs(dfs, 'CulturalHeritageObject')).empty:
+            return []
 
         object_id = '' # Variable to track the current object identifier
         for row in df.to_numpy(dtype=object, na_value=None):
@@ -122,20 +114,17 @@ class BasicMashup:
         """
         Convert DataFrame(s) into a list of Activity objects.
         """
-        result = []
-        df = self.normalizeDFs(dfs, 'Activity')
+        result: List[Activity] = []
+        if (df := self._normalizeDFs(dfs, 'Activity')).empty:
+            return []
 
-        if df.empty:
-            return result
-
-        activity_ids = df.index
-        objects, missing_ids = self.getCulturalHeritageObjectsByIds(activity_ids)
+        objects, missing_ids = self.getCulturalHeritageObjectsByIds(df.index)
         # Map activity names to their corresponding classes and attribute counts
         row_map = [
             (getattr(domain, activity_name), len(ACTIVITIES[activity_name]) - 1) # Do not count 'refersTo'
             for activity_name in df.columns.get_level_values(0).unique()
         ]
-        array = df[~activity_ids.isin(missing_ids)].to_numpy(dtype=object, na_value=None)
+        array = df[~df.index.isin(missing_ids)].to_numpy(dtype=object, na_value=None)
         # Iterate through the DataFrame rows, creating Activity objects and linking them with objects
         for obj, row in zip(objects, array):
             index = 0
@@ -149,17 +138,16 @@ class BasicMashup:
 
     def getEntityById(self, identifier: str) -> Union[IdentifiableEntity, None]: # Francesca
         for handler in self.metadataQuery:
-            df = handler.getById(identifier)
-            if df.empty:
+            if (df := handler.getById(identifier)).empty:
                 continue
             elif 'class' in df: # The result is an object
-                return self.toCHO(df)
+                return self.toCHO(df)[0]
             else:
-                return self.toPerson(df)
+                return self.toPerson(df)[0]
         else:
             return None
 
-    def getCulturalHeritageObjectsByIds(self, identifiers: Union[List[str], Set[str]]) -> Tuple[List[CulturalHeritageObject], Set[str]]: # Francesca
+    def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> tuple[List[CulturalHeritageObject], Set[str]]: # Francesca
         """
         Retrieve cultural heritage objects by their identifiers from multiple metadata handlers.
 
@@ -170,8 +158,7 @@ class BasicMashup:
         i = 0
         identifiers = set(identifiers)
         while i < len(self.metadataQuery) and identifiers:
-            df = self.metadataQuery[i].getById(identifiers)
-            if df.empty:
+            if (df := self.metadataQuery[i].getById(identifiers)).empty:
                 i += 1
                 continue
             identifiers -= set(df['identifier'])
@@ -191,8 +178,7 @@ class BasicMashup:
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> List[Person]: # Francesca
         # Because of the structure of metadata, all authors of an object are guaranteed to be in the same database
         for handler in self.metadataQuery:
-            df = handler.getAuthorsOfCulturalHeritageObject(objectId)
-            if df.empty:
+            if (df := handler.getAuthorsOfCulturalHeritageObject(objectId)).empty:
                 continue
             else:
                 return self.toPerson(df)
@@ -228,6 +214,6 @@ class BasicMashup:
         dfs = [handler.getActivitiesEndedBefore(date) for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getAcquisitionsByTechnique(self, partialName: str) -> List[Acquisition]: # Lin
+    def getAcquisitionsByTechnique(self, partialName: str) -> List[Activity]: # Lin
         dfs = [handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery]
         return self.toActivity(dfs)

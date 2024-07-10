@@ -1,4 +1,4 @@
-from .print import (
+from streamlod.interface.print import (
     single_print,
     multi_print,
     title_print,

@@ -1,10 +1,6 @@
-from streamlod import (
-    MetadataUploadHandler,
-    ProcessDataUploadHandler,
-    MetadataQueryHandler,
-    ProcessDataQueryHandler,
-    AdvancedMashup
-)
+from streamlod.handlers import MetadataUploadHandler, ProcessDataUploadHandler, MetadataQueryHandler, ProcessDataQueryHandler
+from streamlod.mashups import AdvancedMashup
+
 from streamlod.interface import *
 
 """

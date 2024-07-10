@@ -1,11 +1,11 @@
-from .handlers import (
+from streamlod.handlers import (
     MetadataUploadHandler,
     ProcessDataUploadHandler,
     MetadataQueryHandler,
     ProcessDataQueryHandler
 )
 
-from .mashups import BasicMashup, AdvancedMashup
+from streamlod.mashups import BasicMashup, AdvancedMashup
 
 __all__ = [
     'MetadataUploadHandler',
