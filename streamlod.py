@@ -99,52 +99,52 @@ rich_print(mashup.getAllPeople())
 title_print('PROCESS DATA QUERY AND MASHUP')
 
 subtitle_print('Activities on Object 150:')
-multi_print(process_qh.getById('150'))
+stack_print(process_qh.getById('150'))
 
 subtitle_print('Activities on Object 10:')
-multi_print(process_qh.getById('10'))
+stack_print(process_qh.getById('10'))
 
 subtitle_print('Activities on Object 11:')
-multi_print(process_qh.getById('11'))
+stack_print(process_qh.getById('11'))
 
 subtitle_print('Activities on Object 13:')
-multi_print(process_qh.getById('13'))
+stack_print(process_qh.getById('13'))
 
 subtitle_print('Activities on Object 14:')
-multi_print(process_qh.getById('14'))
+stack_print(process_qh.getById('14'))
 
 subtitle_print('Activities on Object 23:')
-multi_print(process_qh.getById('23'))
+stack_print(process_qh.getById('23'))
 
 subtitle_print('Activities on Object 29:')
-multi_print(process_qh.getById('29'))
+stack_print(process_qh.getById('29'))
 
 subtitle_print('All Activities:')
-multi_print(process_qh.getAllActivities())
+stack_print(process_qh.getAllActivities())
 rich_print(mashup.getAllActivities())
 
 subtitle_print('Activities by institution Heritage:')
-multi_print(process_qh.getActivitiesByResponsibleInstitution('itage'))
+stack_print(process_qh.getActivitiesByResponsibleInstitution('itage'))
 rich_print(mashup.getActivitiesByResponsibleInstitution('itage'))
 
 subtitle_print('Activities by person Emily Bronte:')
-multi_print(process_qh.getActivitiesByResponsiblePerson('y B'))
+stack_print(process_qh.getActivitiesByResponsiblePerson('y B'))
 rich_print(mashup.getActivitiesByResponsiblePerson('y B'))
 
 subtitle_print('Activities with tool "lab-":')
-multi_print(process_qh.getActivitiesUsingTool('lab-'))
+stack_print(process_qh.getActivitiesUsingTool('lab-'))
 rich_print(mashup.getActivitiesUsingTool('lab-'))
 
 subtitle_print('Activities started after 24th October 2023:')
-multi_print(process_qh.getActivitiesStartedAfter('2023-10-24'))
+stack_print(process_qh.getActivitiesStartedAfter('2023-10-24'))
 rich_print(mashup.getActivitiesStartedAfter('2023-10-24'))
 
 subtitle_print('Activities ended before 4th March 2023:')
-multi_print(process_qh.getActivitiesEndedBefore('2023-03-04'))
+stack_print(process_qh.getActivitiesEndedBefore('2023-03-04'))
 rich_print(mashup.getActivitiesEndedBefore('2023-03-04'))
 
 subtitle_print('Acquisitons with technique "3d":')
-multi_print(process_qh.getAcquisitionsByTechnique('3d'))
+stack_print(process_qh.getAcquisitionsByTechnique('3d'))
 rich_print(mashup.getAcquisitionsByTechnique('3d'))
 
 
