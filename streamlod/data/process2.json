@@ -1,782 +1,5 @@
 [
-    {
-        "object id": "13",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 50mm"
-            ],
-            "start date": "2023-05-08",
-            "end date": "2023-05-08"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-05-08",
-            "end date": "2023-05-09"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-22",
-            "end date": "2023-06-24"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-05-07",
-            "end date": "2023-06-07"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-07",
-            "end date": "2023-06-07"
-        }
-    },
-    {
-        "object id": "2",
-        "acquisition": {
-            "responsible institute": "cacca",
-            "responsible person": "Jane Doe",
-            "technique": "Photogrammetry",
-            "tool": [],
-            "start date": "2023-04-17",
-            "end date": "2023-04-17"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Jane Doe",
-            "tool": [
-                "Metashape"
-            ],
-            "start date": "2023-04-21",
-            "end date": "2023-04-26"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-24",
-            "end date": "2023-07-24"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-24",
-            "end date": "2023-07-24"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-26",
-            "end date": "2023-07-26"
-        }
-    },
-    {
-        "object id": "ciao",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Jane Doe",
-            "technique": "Photogrammetry",
-            "tool": [],
-            "start date": "2023-04-17",
-            "end date": "2023-04-17"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Jane Doe",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-04-21",
-            "end date": "2023-04-26"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-13",
-            "end date": "2023-07-13"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-14",
-            "end date": "2023-07-14"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-14",
-            "end date": "2023-07-14"
-        }
-    },
-    {
-        "object id": "999",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Jane Doe",
-            "technique": "Photogrammetry",
-            "tool": [],
-            "start date": "2023-04-17",
-            "end date": "2023-04-17"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Jane Doe",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-04-21",
-            "end date": "2023-04-26"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-07",
-            "end date": "2023-07-07"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-10-07",
-            "end date": "2023-10-07"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-11-07",
-            "end date": "2023-11-07"
-        }
-    },
-    {
-        "object id": "5",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 35mm"
-            ],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-04-05",
-            "end date": "2023-04-07"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-20",
-            "end date": "2023-07-20"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-21",
-            "end date": "2023-07-24"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-24",
-            "end date": "2023-07-24"
-        }
-    },
-    {
-        "object id": "6",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 35mm"
-            ],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "Metashape"
-            ],
-            "start date": "2023-04-05",
-            "end date": "2023-04-07"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-27",
-            "end date": "2023-07-27"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-27",
-            "end date": "2023-07-27"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-27",
-            "end date": "2023-07-27"
-        }
-    },
-    {
-        "object id": "7",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 35mm"
-            ],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-04-05",
-            "end date": "2023-04-07"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-17",
-            "end date": "2023-07-17"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-17",
-            "end date": "2023-07-18"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-18",
-            "end date": "2023-07-18"
-        }
-    },
-    {
-        "object id": "8",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 35mm"
-            ],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-04-05",
-            "end date": "2023-04-07"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-18",
-            "end date": "2023-07-19"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-19",
-            "end date": "2023-07-19"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-19",
-            "end date": "2023-07-19"
-        }
-    },
-    {
-        "object id": "9",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 35mm"
-            ],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-04-05",
-            "end date": "2023-04-07"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-28",
-            "end date": "2023-06-28"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Gimp",
-                "Blender",
-                "Instant Meshes"
-            ],
-            "start date": "2023-07-07",
-            "end date": "2023-07-07"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-07-07",
-            "end date": "2023-07-07"
-        }
-    },
-    {
-        "object id": "10",
-        "acquisition": {
-            "responsible institute": "Heritage",
-            "responsible person": "Ada Lovelace",
-            "technique": "Structured-light 3D scanner",
-            "tool": [
-                "Artec EVA"
-            ],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Heritage",
-            "responsible person": "Ada Lovelace",
-            "tool": [
-                "Artec Studio 15"
-            ],
-            "start date": "2023-06-22",
-            "end date": "2023-06-22"
-        },
-        "modelling": {
-            "responsible institute": "Heritage",
-            "responsible person": "Ada Lovelace",
-            "tool": [
-                "Artec Studio 15"
-            ],
-            "start date": "2023-06-22",
-            "end date": "2023-06-22"
-        },
-        "optimising": {
-            "responsible institute": "Heritage",
-            "responsible person": "Ada Lovelace",
-            "tool": [
-                "Artec Studio 15",
-                "Adobe Photoshop 2023"
-            ],
-            "start date": "2023-06-22",
-            "end date": "2023-06-22"
-        },
-        "exporting": {
-            "responsible institute": "Heritage",
-            "responsible person": "Ada Lovelace",
-            "tool": [
-                "Artec Studio 15",
-                "Adobe Photoshop 2023"
-            ],
-            "start date": "2023-06-22",
-            "end date": "2023-06-22"
-        }
-    },
-    {
-        "object id": "11",
-        "acquisition": {
-            "responsible institute": "Architecture",
-            "responsible person": "George Byron",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Sony Alpha 7 I"
-            ],
-            "start date": "2023-05-08",
-            "end date": "2023-05-08"
-        },
-        "processing": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "modelling": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "optimising": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "exporting": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        }
-    },
-    {
-        "object id": "12",
-        "acquisition": {
-            "responsible institute": "Architecture",
-            "responsible person": "George Byron",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Sony Alpha 7 I"
-            ],
-            "start date": "2023-05-08",
-            "end date": "2023-05-08"
-        },
-        "processing": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "modelling": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "optimising": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "exporting": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        }
-    },
-    {
-        "object id": "13",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 50mm"
-            ],
-            "start date": "2023-03-24",
-            "end date": "2023-03-24"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-03-28",
-            "end date": "2023-03-29"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-14",
-            "end date": "2023-06-16"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Instant Meshes-3DF Zephyr"
-            ],
-            "start date": "2023-06-14",
-            "end date": "2023-06-16"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-16",
-            "end date": "2023-06-16"
-        }
-    },
-    {
-        "object id": "14",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "",
-            "technique": "Photogrammetry",
-            "tool": [],
-            "start date": "2023-03-04",
-            "end date": "2023-03-04"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-05-04",
-            "end date": "2023-07-04"
-        },
-        "modelling": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "optimising": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        },
-        "exporting": {
-            "responsible institute": "",
-            "responsible person": "",
-            "tool": [],
-            "start date": "",
-            "end date": ""
-        }
-    },
-    {
-        "object id": "15",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 50mm"
-            ],
-            "start date": "2023-04-17",
-            "end date": "2023-04-17"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-03-05",
-            "end date": "2023-05-05"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-10",
-            "end date": "2023-09-10"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Instant Meshes",
-                "3DFZephyr",
-                "Gimp "
-            ],
-            "start date": "2023-09-10",
-            "end date": "2023-09-10"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-09-10",
-            "end date": "2023-09-10"
-        }
-    },
-    {
-        "object id": "16",
-        "acquisition": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "technique": "Photogrammetry",
-            "tool": [
-                "Nikon D7200 Nikor 50mm"
-            ],
-            "start date": "2023-04-17",
-            "end date": "2023-04-17"
-        },
-        "processing": {
-            "responsible institute": "Council",
-            "responsible person": "Alice Liddell",
-            "tool": [
-                "3DF Zephyr"
-            ],
-            "start date": "2023-03-05",
-            "end date": "2023-05-05"
-        },
-        "modelling": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-05-10",
-            "end date": "2023-05-10"
-        },
-        "optimising": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Instant Meshes",
-                "3DFZephyr",
-                "Gimp "
-            ],
-            "start date": "2023-06-10",
-            "end date": "2023-06-10"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-10",
-            "end date": "2023-06-10"
-        }
-    },
+
     {
         "object id": "17",
         "acquisition": {
@@ -1712,6 +935,130 @@
             ],
             "start date": "2023-08-21",
             "end date": "2023-08-21"
+        }
+    },
+    {
+        "object id": "15",
+        "acquisition": {
+            "responsible institute": "Council",
+            "responsible person": "Alice Liddell",
+            "technique": "Photogrammetry",
+            "tool": [
+                "Nikon D7200 Nikor 50mm"
+            ],
+            "start date": "2023-04-17",
+            "end date": "2023-04-17"
+        },
+        "processing": {
+            "responsible institute": "Council",
+            "responsible person": "Alice Liddell",
+            "tool": [
+                "3DF Zephyr"
+            ],
+            "start date": "2023-03-05",
+            "end date": "2023-05-05"
+        },
+        "modelling": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-06-10",
+            "end date": "2023-09-10"
+        },
+        "optimising": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Instant Meshes",
+                "3DFZephyr",
+                "Gimp "
+            ],
+            "start date": "2023-09-10",
+            "end date": "2023-09-10"
+        },
+        "exporting": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-09-10",
+            "end date": "2023-09-10"
+        }
+    },
+    {
+        "object id": "16",
+        "acquisition": {
+            "responsible institute": "Council",
+            "responsible person": "Alice Liddell",
+            "technique": "Photogrammetry",
+            "tool": [
+                "Nikon D7200 Nikor 50mm"
+            ],
+            "start date": "2023-04-17",
+            "end date": "2023-04-17"
+        },
+        "processing": {
+            "responsible institute": "Council",
+            "responsible person": "Alice Liddell",
+            "tool": [
+                "3DF Zephyr"
+            ],
+            "start date": "2023-03-05",
+            "end date": "2023-05-05"
+        },
+        "modelling": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-05-10",
+            "end date": "2023-05-10"
+        },
+        "optimising": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Instant Meshes",
+                "3DFZephyr",
+                "Gimp "
+            ],
+            "start date": "2023-06-10",
+            "end date": "2023-06-10"
+        },
+        "exporting": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-06-10",
+            "end date": "2023-06-10"
+        }
+    },
+    {
+        "object id": "1",
+        "acquisition": {
+            "responsible institute": "Council",
+            "responsible person": "Alice Liddell",
+            "technique": "Photogrammetry",
+            "tool": [
+                "Nikon D7200 Nikor 50mm"
+            ],
+            "start date": "2023-05-08",
+            "end date": "2023-05-08"
+        },
+        "processing": {
+            "responsible institute": "Council",
+            "responsible person": "",
+            "tool": [
+                "3DF Zephyr"
+            ],
+            "start date": "2023-05-08",
+            "end date": "2023-05-09"
         }
     }
 ]

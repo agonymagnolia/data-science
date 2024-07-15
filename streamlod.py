@@ -5,6 +5,7 @@ from streamlod.interface import *
 
 """
 Pip install rich for a better experience
+
 """
 
 metadata_csv_path = 'streamlod/data/meta.csv'
@@ -15,8 +16,8 @@ process_db_path = 'streamlod/databases/relational.db'
 
 metadata_uh = MetadataUploadHandler()
 process_uh = ProcessDataUploadHandler()
-metadata_upload_path = metadata_uh.setDbPathOrUrl(metadata_endpoint)
-process_upload_path = process_uh.setDbPathOrUrl(process_db_path)
+metadata_upload_path = metadata_uh.setDbPathOrUrl(metadata_endpoint, reset=True)
+process_upload_path = process_uh.setDbPathOrUrl(process_db_path, reset=True)
 
 metadata_push1 = metadata_uh.pushDataToDb(metadata_csv_path)
 metadata_push2 = metadata_uh.pushDataToDb(metadata_csv_path) # test to manage multiple pushes
@@ -138,9 +139,9 @@ subtitle_print('Activities started after 24th October 2023:')
 multi_print(process_qh.getActivitiesStartedAfter('2023-10-24'))
 rich_print(mashup.getActivitiesStartedAfter('2023-10-24'))
 
-subtitle_print('Activities ended before 3rd March 2023:')
-multi_print(process_qh.getActivitiesEndedBefore('2023-03-10'))
-rich_print(mashup.getActivitiesEndedBefore('2023-03-10'))
+subtitle_print('Activities ended before 4th March 2023:')
+multi_print(process_qh.getActivitiesEndedBefore('2023-03-04'))
+rich_print(mashup.getActivitiesEndedBefore('2023-03-04'))
 
 subtitle_print('Acquisitons with technique "3d":')
 multi_print(process_qh.getAcquisitionsByTechnique('3d'))
@@ -149,7 +150,7 @@ rich_print(mashup.getAcquisitionsByTechnique('3d'))
 
 title_print('ADVANCED MASHUP')
 
-subtitle_print('Activities on Objects by VIAF:263904234:')
+subtitle_print('Activities on Objects by VIAF:263904234 (Tarsizio Riviera):')
 rich_print(mashup.getActivitiesOnObjectsAuthoredBy('VIAF:263904234'))
 
 subtitle_print('Objects handled by person Emily Bronte:')

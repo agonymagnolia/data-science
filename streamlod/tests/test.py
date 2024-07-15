@@ -26,7 +26,7 @@ from pandas import DataFrame
 
 from streamlod.handlers import MetadataUploadHandler, ProcessDataUploadHandler, MetadataQueryHandler, ProcessDataQueryHandler
 from streamlod.mashups import AdvancedMashup
-from streamlod.domain import Person, CulturalHeritageObject, Activity, Acquisition
+from streamlod.entities import Person, CulturalHeritageObject, Activity, Acquisition
 
 # REMEMBER: before launching the tests, please run the Blazegraph instance!
 
@@ -37,9 +37,9 @@ class TestProjectBasic(unittest.TestCase):
     # the SPARQL endpoint must be updated depending on how you launch it - currently, it is
     # specified the URL introduced during the course, which is the one used for a standard
     # launch of the database.
-    metadata = "streamlod/data/meta.csv"
-    process = "streamlod/data/process.json"
-    relational = "streamlod/databases/relational.db"
+    metadata = "streamlod" + sep + "data" + sep + "meta.csv"
+    process = "streamlod" + sep + "data" + sep + "process.json"
+    relational = "streamlod" + sep + "databases" + sep + "relational.db"
     graph = "http://127.0.0.1:9999/blazegraph/sparql"
     
     def test_01_MetadataUploadHandler(self):

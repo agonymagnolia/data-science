@@ -2,36 +2,11 @@ from typing import Union, Any, List, Dict, Set, Mapping, Iterable
 import pandas as pd
 import json
 import sqlite3
+from urllib.request import pathname2url
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
+from streamlod.entities.mappings import ACTIVITIES
 from streamlod.utils import key, id_join
-
-ACTIVITY_ATTRIBUTES = { # Attribute : required
-    'refersTo': True,
-    'institute': True,
-    'person': False,
-    'start': False,
-    'end': False,
-    'tool': False
-}
-
-ACQUISITION_ATTRIBUTES = {
-    'refersTo': True,
-    'institute': True,
-    'technique': True,
-    'person': False,
-    'start': False,
-    'end': False,
-    'tool': False
-}
-
-ACTIVITIES = {
-    'Acquisition': ACQUISITION_ATTRIBUTES,
-    'Processing': ACTIVITY_ATTRIBUTES,
-    'Modelling': ACTIVITY_ATTRIBUTES,
-    'Optimising': ACTIVITY_ATTRIBUTES,
-    'Exporting': ACTIVITY_ATTRIBUTES
-}
 
 
 class ProcessDataUploadHandler(UploadHandler): # Alberto
@@ -51,36 +26,45 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             f'{activity}.end date': 'end'
         }
 
-    def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
+    def setDbPathOrUrl(self, newDbPathOrUrl: str, *, reset: bool = False) -> bool:
         # Set the new database path
         if not super().setDbPathOrUrl(newDbPathOrUrl):
             return False
+        elif reset and not self.clearDb():
+            return False
+
+        db = self.getDbPathOrUrl()
+
         try:
-            # Connect to the database
-            with sqlite3.connect(self.getDbPathOrUrl()) as con:
-                query = '\nUNION\n'.join(f"SELECT internalId FROM {activity}" for activity in ACTIVITIES) + ';'
-
-                try:
-                    # Execute the combined query and update identifiers set
-                    self.identifiers.update(row[0] for row in con.execute(query).fetchall())
-                    
-                except sqlite3.Error: # Tables do not exist
-                    pass
-
-        except sqlite3.Error as e:
+            con = sqlite3.connect(db)
+        except sqlite3.OperationalError as e:
             print(e)
             return False
-        
-        return True
+        else:
+            for activity in ACTIVITIES:
+                try:
+                    cursor = con.execute(f"SELECT internalId FROM {activity};")
+                    ids = (row[0] for row in cursor.fetchall())
+                    self.identifiers.update(ids)
+                except sqlite3.OperationalError:
+                    continue # Table does not exist, continue with next activity
+            con.close()
+            return True
 
     def pushDataToDb(self, path: str) -> bool:
+        if not (db := self.getDbPathOrUrl()):
+            print('Exception: Database path not set.')
+            return False
+
         # Load the JSON file
         try:
             with open(path, 'r', encoding='utf-8') as file:
                 json_doc = json.load(file)
-        # Error raised if the data being deserialized is not a valid JSON document.
-        # Repeated entries are accepted, and only the value of the last name-value pair is used
-        except json.JSONDecodeError:
+        except IOError as e:
+            print(e)
+            return False
+        except json.JSONDecodeError as e: # Not a valid JSON document
+            print(e)
             return False
 
         # Flatten the JSON document into a DataFrame
@@ -104,12 +88,10 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             tool = activity.pop('tool')
             for col in activity:
                 activity[col] = activity[col].str.strip()
-            activity['internalId'] = name + '-' + activity['internalId']  # Prefix internalId with activity name
+            activity.internalId = name + '-' + activity.internalId  # Prefix internalId with activity name
 
             # Filter out activity instances already in the database
-            activity = activity[~activity['internalId'].isin(self.identifiers)]
-
-            self.identifiers.update(activity['internalId'])  # Update existing activities set
+            activity = activity[~activity.internalId.isin(self.identifiers)]
 
             # Drop rows not compliant with the data model
             validate = [attr for attr, required in attrs.items() if required]
@@ -119,11 +101,13 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             if activity.empty:
                 continue
 
+            self.identifiers.update(activity.internalId)  # Update existing activities set
+
             activities[name] = activity  # Store valid activities DataFrame linked to activity name
 
-            # Process tools: split lists in tool column into separate rows with the same internalId
-            split = pd.concat([activity['internalId'], tool], axis=1)
-            split = split[split['internalId'].notna()].explode('tool')
+            # Split lists in tool column into separate rows with the same internalId
+            split = pd.concat([activity.internalId, tool], axis=1)
+            split = split[split.internalId.notna()].explode('tool')
             split.tool = split.tool.str.strip()
 
             tools = pd.concat([tools, split], ignore_index=True)  # Accumulate tools
@@ -132,50 +116,66 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             return True
 
         # Add tables to the database
-        with sqlite3.connect(self.getDbPathOrUrl()) as con:
-            for name, activity in activities.items():
-                activity.to_sql(name, con, if_exists='append', index=False, dtype='TEXT')
-            tools.to_sql('Tool', con, if_exists='append', index=False, dtype='TEXT')
+        try:
+            with sqlite3.connect(db) as con:
+                for name, activity in activities.items():
+                    activity.to_sql(name, con, if_exists='append', index=False, dtype='TEXT')
+                tools.to_sql('Tool', con, if_exists='append', index=False, dtype='TEXT')
+            return True
+        except sqlite3.OperationalError as e:
+            print(e)
+            return False
 
-        return True
-
+    def clearDb(self) -> bool:
+        db = self.getDbPathOrUrl()
+        try:
+            with sqlite3.connect(db) as con:
+                for activity in ACTIVITIES:
+                    con.execute(f"DROP TABLE IF EXISTS {activity};")
+                con.execute(f"DROP TABLE IF EXISTS Tool;")
+            self.identifiers = set()
+            return True
+        except sqlite3.OperationalError as e:
+            print(e)
+            return False
 
 class ProcessDataQueryHandler(QueryHandler): # Anna
 
-    def queryAttribute(
+    def getAttribute(
         self,
-        activity_list: Iterable[str] = ACTIVITIES,
+        activity_list: Iterable[str] = ACTIVITIES.keys(),
         attribute: str = 'refersTo',
         filter_condition: str = ''
-    ) -> List[Any]:
-        subqueries = []
-
+        ) -> List[Any]:
         # Build subqueries for each activity and combine them with UNION
-        for activity in activity_list:
+        subqueries = []
+        for name in activity_list:
             sql= f"""
                 SELECT {attribute}
-                FROM {activity}
+                FROM {name}
                 {filter_condition}"""
             subqueries.append(sql)
         query = '\nUNION\n'.join(subqueries) + ';'
 
         # Execute the combined query and fetch the results
-        with sqlite3.connect(self.getDbPathOrUrl()) as con:
-                result = con.execute(query).fetchall()
+        db = self.getDbPathOrUrl()
+        with sqlite3.connect(db) as con:
+            result = con.execute(query).fetchall()
 
         # Return a list of the attribute values
         return [row[0] for row in result]
 
-    def queryAttributes(
+    def getActivities(
         self,
-        activity_dict: Mapping[str, Iterable[str]] = ACTIVITIES,
+        activity_list: Iterable[str] = ACTIVITIES.keys(),
         filter_condition: str = ''
-    ) -> pd.DataFrame:
+        ) -> pd.DataFrame:
         activities = {}
 
         # Build and execute the query for each activity
-        for name, attrs in activity_dict.items():
-            cols = ", ".join(list(attrs)[:-1]) # Exclude the 'tool' column
+        for name in activity_list:
+            attrs = list(ACTIVITIES[name])[:-1] # Exclude the 'tool' column
+            cols = ", ".join(attrs)
             query = f"""
                 SELECT {cols}, GROUP_CONCAT(T.tool) AS tool
                 FROM {name} AS A
@@ -184,7 +184,8 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
                 {filter_condition}
                 GROUP BY {cols};
                 """
-            with sqlite3.connect(self.getDbPathOrUrl()) as con:
+            db = self.getDbPathOrUrl()
+            with sqlite3.connect(db) as con:
                 activity = pd.read_sql_query(query, con)
 
             # Skip activity if the DataFrame is all NaNs (no instance fulfills the condition)
@@ -192,7 +193,7 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
                 continue
 
             # Split tool combined string in a set and set 'refersTo' as index
-            activity.tool = activity.tool.apply(lambda x: set(x.split(',')) if x else set())
+            activity.tool = activity.tool.apply(lambda x: set(x.split(',')) if x else None)
             activities[name] = activity.set_index('refersTo')
 
         # Return an empty DataFrame if no valid activities are found
@@ -206,25 +207,25 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
     def getById(self, identifiers: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string
         identifiers = id_join(identifiers, ', ')
-        return self.queryAttributes(filter_condition=f'WHERE A.refersTo IN ({identifiers})')
+        return self.getActivities(filter_condition=f'WHERE A.refersTo IN ({identifiers})')
 
     def getAllActivities(self) -> pd.DataFrame:
-        return self.queryAttributes()
+        return self.getActivities()
 
     def getActivitiesByResponsibleInstitution(self, partialName: str) -> pd.DataFrame:
-        return self.queryAttributes(filter_condition=f"WHERE A.institute LIKE '%{partialName}%'")
+        return self.getActivities(filter_condition=f"WHERE A.institute LIKE '%{partialName}%'")
 
     def getActivitiesByResponsiblePerson(self, partialName: str) -> pd.DataFrame:
-        return self.queryAttributes(filter_condition=f"WHERE A.person LIKE '%{partialName}%'")
+        return self.getActivities(filter_condition=f"WHERE A.person LIKE '%{partialName}%'")
 
     def getActivitiesUsingTool(self, partialName: str) -> pd.DataFrame:
-        return self.queryAttributes(filter_condition=f"WHERE T.tool LIKE '%{partialName}%'")
+        return self.getActivities(filter_condition=f"WHERE T.tool LIKE '%{partialName}%'")
 
     def getActivitiesStartedAfter(self, date: str) -> pd.DataFrame:
-        return self.queryAttributes(filter_condition=f"WHERE A.start >= '{date}'")
+        return self.getActivities(filter_condition=f"WHERE A.start >= '{date}'")
 
     def getActivitiesEndedBefore(self, date: str) -> pd.DataFrame:
-        return self.queryAttributes(filter_condition=f"WHERE A.end <= '{date}'")
+        return self.getActivities(filter_condition=f"WHERE A.end <= '{date}'")
 
     def getAcquisitionsByTechnique(self, partialName: str) -> pd.DataFrame:
-        return self.queryAttributes({'Acquisition': ACQUISITION_ATTRIBUTES}, filter_condition=f"WHERE A.technique LIKE '%{partialName}%'")
+        return self.getActivities(['Acquisition'], filter_condition=f"WHERE A.technique LIKE '%{partialName}%'")

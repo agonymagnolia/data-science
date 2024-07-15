@@ -1,311 +1,266 @@
-from typing import Union, List, Set, Generator
+from typing import Union, List, Set, Generator, Optional, Any, Iterable
 import pandas as pd
-from rdflib.namespace import Namespace, DC, FOAF, RDF, RDFS
+from rdflib import Graph
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from urllib.parse import quote_plus
 from urllib.error import URLError
-from sparql_dataframe import get
+from SPARQLWrapper import SPARQLWrapper
+from io import StringIO
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
+import streamlod.entities as entities
+from streamlod.entities.mappings import IDE, BASE, NS, Relation, MapMeta
 from streamlod.utils import id_join, key
 
-# Namespaces
-EDM = Namespace('http://www.europeana.eu/schemas/edm/')
-LOC = Namespace('https://agonymagnolia.github.io/data-science#') # This is the local namespace
-
-"""
-Attribute mappings
- Keys: Attribute names in CSV order
- Values: 
-  0. Attribute order for output DataFrame and object initialization
-  1. Required
-  2. Separator if multiple
-  3. RDF Predicate
-  4. Value type (if relation, 0. Subentity, 1. Regex pattern)
-"""
-
-CHO_ATTRIBUTES = {
-    'identifier': (1, True, None, DC.identifier, ''),
-    'class': (0, True, None, RDF.type, LOC),
-    'title': (2, True, None, DC.title, ''),
-    'date': (5, False, None, DC.date, ''),
-    'hasAuthor': (6, False, '; ', DC.creator, ('Person', r"^(?P<name>.+?)\s*?\(\s*(?P<identifier>.+?)\s*\)\s*$")),
-    'owner': (3, True, None, EDM.currentLocation, ''),
-    'place': (4, True, None, DC.coverage, '')
-}
-
-PERSON_ATTRIBUTES = {
-    'identifier': (7, True, None, DC.identifier, ''),
-    'name': (8, True, None, FOAF.name, '')
-}
-
-"""
-Entity mappings
- Keys: internalId prefix
- Values:
-  0. Entity class or superclass
-  1. Attribute mapping
-"""
-
-IDENTIFIABLE_ENTITIES = {
-    'CHO': (EDM.PhysicalThing, CHO_ATTRIBUTES),
-    'Person': (EDM.Agent, PERSON_ATTRIBUTES), 
-}
-
-OBJECT_QUERY = """
-    PREFIX dc: <http://purl.org/dc/elements/1.1/>
-    PREFIX edm: <http://www.europeana.eu/schemas/edm/>
-    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
-    SELECT DISTINCT ?class ?identifier ?title ?owner ?place ?date ?author_id ?author_name
-    WHERE {
-        ?class rdfs:subClassOf edm:PhysicalThing .
-        ?internalId a ?class ;
-                    dc:identifier ?identifier ;
-                    dc:title ?title ;
-                    edm:currentLocation ?owner ;
-                    dc:coverage ?place .
-
-        OPTIONAL { ?internalId dc:date ?date . }
-        OPTIONAL {
-            ?hasAuthor ^dc:creator ?internalId ;
-                        dc:identifier ?author_id ;
-                        foaf:name ?author_name .
-        }
-    """
-
-PERSON_QUERY = """
-    PREFIX dc: <http://purl.org/dc/elements/1.1/>
-    PREFIX edm: <http://www.europeana.eu/schemas/edm/>
-    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
-    SELECT DISTINCT ?identifier ?name
-    WHERE {
-        ?internalId a edm:Agent ;
-                    dc:identifier ?identifier ;
-                    foaf:name ?name ;
-    """
 
 class MetadataUploadHandler(UploadHandler): # Francesca
-    # Mapping of csv values to data model classes
-    _csv_map = {
-            'Nautical chart': 'NauticalChart',
-            'Manuscript plate': 'ManuscriptPlate',
-            'Manuscript volume': 'ManuscriptVolume',
-            'Printed volume': 'PrintedVolume',
-            'Printed material': 'PrintedMaterial',
-            'Herbarium': 'Herbarium',
-            'Specimen': 'Specimen',
-            'Painting': 'Painting',
-            'Model': 'Model',
-            'Map': 'Map'
-        }
-
     def __init__(self):
         super().__init__()
         self.store = SPARQLUpdateStore(autocommit=False, context_aware=False) # Database connection only on commit
         self.store.method = 'POST'
-        self.identifiers: Set[str] = set()
+
+    def setDbPathOrUrl(self, newDbPathOrUrl: str, *, reset: bool = False) -> bool:
+        if not super().setDbPathOrUrl(newDbPathOrUrl):
+            return False
+        elif reset and not self.clearDb():
+            return False
+
+        endpoint = self.getDbPathOrUrl()
+        store = self.store
+
+        try:
+            store.open((endpoint, endpoint))
+            store.close()
+            return True
+        except Exception as e:
+            print(e)
+            return False
+
+    def _check_class(self, string: str) -> str:
+        string = ''.join(word.capitalize() for word in string.split())
+        if hasattr(entities, string):
+            return string
+        else:
+            return pd.NA
+
+    def _validateIDE(self, df: pd.DataFrame, entity_name: str) -> pd.DataFrame:
+        for col in df: 
+            df[col] = df[col].str.strip()
+
+        if 'class' in df:
+            df['class'] = df['class'].map(self._check_class, na_action='ignore')
+            df.dropna(subset=['identifier', 'class'], inplace=True)
+        else:
+            df.dropna(subset='identifier', inplace=True)
+
+        df.index = df.identifier.map(lambda identifier: f'loc:{entity_name}-{quote_plus(identifier)}')
+
+        return df
+
+    def toRDF(self, df: pd.DataFrame, entity_name: str = BASE) -> Generator[str, None, None]:
+        try:
+            entity_map = IDE[entity_name]
+            entity, attrs = entity_map['entity'], entity_map['attributes']
+        except KeyError as e:
+            raise ValueError(f"Entity '{entity_name}' is not defined in the identifiable entities mapping.") from e
+
+        df = self._validateIDE(df, entity_name)
+
+        if 'class' in attrs:
+            class_ns = attrs['class'].vtype # Class namespace
+            for c in df['class'].unique():
+                yield f'{class_ns}:{c} rdfs:subClassOf {entity} .'
+        else:
+            for s in df.index:
+                yield f'{s} rdf:type {entity} .'
+
+        for name, attr in attrs.items():
+            p = attr.predicate
+
+            if attr.sep:
+                col = df[name].str.split(attr.sep).explode().dropna()
+            else:
+                col = df[name].dropna()
+
+            if isinstance((ns := attr.vtype), str): # Namespace
+                for s, o in zip(col.index, col.to_list()):
+                    yield f'{s} {p} {ns}:{o} .'
+
+            elif isinstance((rel := attr.vtype), Relation): # Related entity
+                df2 = col.str.extract(rel.pattern).dropna(subset=['identifier'])
+                entity_name2 = rel.name
+
+                for s, id2 in zip(df2.index, df2.identifier.to_list()):
+                    yield f'{s} {p} loc:{entity_name2}-{quote_plus(id2)} .'
+
+                yield from self.toRDF(df2, entity_name2)
+
+            else:
+                for s, o in zip(col.index, col.to_list()):
+                    yield f'{s} {p} "{o}" .'
+
+    def pushDataToDb(self, path: str) -> bool:
+        if not (endpoint := self.getDbPathOrUrl()):
+            print('Exception: Database path not set.')
+            return False
+        store = self.store
+        graph = Graph(store, bind_namespaces='core')
+        for prefix, ns in NS.items():
+            graph.bind(prefix, ns, override=False, replace=False)
+
+        try:
+            df = pd.read_csv(
+                path,
+                header=0,
+                names=IDE[BASE]['attributes'],
+                dtype='string',
+                on_bad_lines='skip',
+                engine='c',
+                memory_map=True,
+            )
+        except FileNotFoundError as e:
+            print(e)
+            return False
+        except ValueError as e:
+            print(e)
+            return False
+
+        graph.update(f'INSERT DATA {{ {" ".join(self.toRDF(df))} }}')
+
+        try:
+            store.open((endpoint, endpoint))
+            store.commit()
+        except URLError as e:
+            print(e)
+            store.rollback()
+            return False
+        except Exception as e:
+            print('Metadata push to database failed: Update endpoint is not set.')
+            store.rollback()
+            return False
+        else:
+            return True
+        finally:
+            store.close()
+
+    def clearDb(self) -> bool:
+        endpoint = self.getDbPathOrUrl()
+        store = self.store
+        try:
+            store.open((endpoint, endpoint))
+            store.update('DELETE { ?s ?p ?o } WHERE { ?s ?p ?o . }')
+            store.commit()
+        except URLError as e:
+            print(e)
+            store.rollback()
+            return False
+        except Exception:
+            print('Database clearing failed: Update endpoint is not set.')
+            store.rollback()
+            return False
+        else:
+            return True
+        finally:
+            store.close()
+
+class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
+    def __init__(self):
+        super().__init__()
+        self.sparql: Optional[SPARQLWrapper] = None
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
         if not super().setDbPathOrUrl(newDbPathOrUrl):
             return False
 
+        # Set query wrapper around sparql endpoint
         endpoint = self.getDbPathOrUrl()
-        store = self.store
+        self.sparql = SPARQLWrapper(endpoint, returnFormat='csv')
+        self.sparql.setOnlyConneg(True)
+        self.sparql.addCustomHttpHeader('Content-type', 'application/sparql-query')
+        self.sparql.addCustomHttpHeader('Accept', 'text/csv')
+        self.sparql.setMethod('POST')
+        self.sparql.setRequestMethod('postdirectly')
 
-        try:
-            store.open((endpoint, endpoint))
-            self.identifiers.update(identifier.value for identifier in store.objects(predicate=DC.identifier))
-            store.close()
-            return True
+        return True
 
-        except URLError as e:
-            print(e)
-            return False
+    def _filter_map(self, entity_name: str, by: Union[str, tuple[str, ...]]) -> str:
+        attrs = IDE[entity_name]['attributes']
 
-    def _validateDF(self, df: pd.DataFrame, entity: str, to_validate: List[str]) -> pd.DataFrame:
-        """
-        Preprocesses the input DataFrame:
-        1. Strips leading and trailing whitespace from all columns.
-        2. Filters out rows with identifiers that already exist in the database or are duplicated within the DataFrame.
-        3. Conforms the 'class' column to a controlled vocabulary.
-        4. Drops rows that do not comply with the required attributes defined in the entity's attribute mapping.
-        5. Sets the DataFrame index to the URI (entity type + identifier).
-        """
-        for col in df: 
-            df[col] = df[col].str.strip() # Trim spaces in every column
-
-        # Drop entities already in database or duplicated
-        df = df[~df.identifier.isin(self.identifiers) & ~df.duplicated('identifier')]
-
-        if df.empty:
-            return df
-
-        self.identifiers.update(df.identifier)
-
-        if 'class' in df:
-            # Change values based on the corresponding entries of a dictionary, others are turned to NaN
-            df.loc[:, 'class'] = df['class'].map(self._csv_map)
-
-        # Drop entities non compliant to the data model
-        df = df[df[to_validate].notna().all(axis=1)]
-
-        df.index = (f'{entity}-' + df.identifier).map(lambda x: LOC[quote_plus(x)].n3())
-
-        return df
-
-    def toRDF(self, df: pd.DataFrame, entity: str = 'CHO') -> Generator[str, None, None]:
-        """
-        Maps the validated DataFrame to RDF triples via an IdentifiableEntity mapping dictionary:
-        1. Generates RDF type triples for the class or its subclasses.
-        2. Maps every attribute of the class to the corresponding DataFrame column, RDF predicate and value type (Literal, external URI or internal relation).
-        3. Traverse vertically each column, linking indexed subjects to single or multiple values via the related predicate.
-        3. Recursively handles nested relation entities.
-
-        Returns a generator that yields RDF triples as strings.
-        """
-        entity_type, mapping = IDENTIFIABLE_ENTITIES[entity]
-        to_validate = [attr for attr, specs in mapping.items() if specs[1]]
-        df = self._validateDF(df, entity, to_validate)
-
-        if 'class' in mapping:
-            for class_name in df['class'].unique():
-                yield f'<{LOC[class_name]}> <{RDFS.subClassOf}> <{entity_type}> .'
-        else:
-            for subject in df.index:
-                yield f'{subject} <{RDF.type}> <{entity_type}> .'
-
-        for attr, (_, _, sep, predicate, value_type) in mapping.items():
-            # Dropna can be safely performed because required attribute columns were already validated.
-            # Alignment is guaranteed by the Series index (the URI).
-            if sep:
-                col = df[attr].str.split(sep).explode().dropna()
+        if isinstance(by, tuple): # Relation
+            if len(by) == 3: # Inverse relation
+                entity_name2, name2, name = by
+                attrs2 = IDE[entity_name2]['attributes']
+                predicate2 = '^' + attrs2[name2].predicate
+                predicate = attrs2[name].predicate
             else:
-                col = df[attr].dropna()
+                name2, name = by
+                attr2 = attrs[name2]
+                predicate2, entity_name2 = attr2.predicate, attr2.vtype.name
+                predicate = IDE[entity_name2]['attributes'][name].predicate
 
-            if isinstance(value_type, Namespace):
-                for subject, obj in zip(col.index, col.to_list()):
-                    yield f'{subject} <{predicate}> <{value_type[obj]}> .'
-
-            elif isinstance(value_type, tuple):
-                rel_entity, regex = value_type
-                rel_df = col.str.extract(regex).dropna(subset='identifier')
-                yield from self.toRDF(rel_df, rel_entity)
-
-                for subject, rel_id in zip(rel_df.index, rel_df.identifier.to_list()):
-                    yield f'{subject} <{predicate}> <{LOC[f"{rel_entity}-" + quote_plus(rel_id)]}> .'
-
-            else:
-                for subject, obj in zip(col.index, col.to_list()):
-                    yield f'{subject} <{predicate}> "{obj}" .'
-
-    def pushDataToDb(self, path: str) -> bool:
-        endpoint = self.getDbPathOrUrl()
-        store = self.store
-
-        df = pd.read_csv(
-            path,
-            header=0,
-            names=list(CHO_ATTRIBUTES),
-            dtype='string',
-            on_bad_lines='skip',
-            engine='c',
-            memory_map=True,
-        )
-        # It's not meant to be done in this way, but it's beautiful
-        store._transaction().append(f'INSERT DATA {{ {" ".join(self.toRDF(df))} }}')
-
-        try:
-            store.open((endpoint, endpoint))
-            store.commit()
-            store.close()
-            return True
-        except URLError as e:
-            print(e)
-            store.rollback()
-            return False
-
-
-class MetadataQueryHandler(QueryHandler):
-    def getById(self, identifiers: Union[str, List[str]]) -> pd.DataFrame:
-        # Normalize identifiers to a string
-        identifiers = id_join(identifiers)
-        # Construct values clause for SPARQL query, specifying identifiers as parameters
-        value_clause = f"""
-        VALUES ?identifier {{ {identifiers} }}
-    }}
-        """
-        endpoint = self.getDbPathOrUrl()
-
-        # First try to look for cultural heritage objects
-        query = OBJECT_QUERY + value_clause
-        df = get(endpoint, query, True).astype('string').sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
-
-        # If the object query found nothing, retry looking for people with the same value clause
-        if df.empty:
-            query = PERSON_QUERY + value_clause
-            df = get(endpoint, query, True).astype('string').sort_values(by='name', ignore_index=True)
-
-        # If the object query was successful, remove personal namespace URL from class entities
+            return f'?s {predicate2} / {predicate} ?x .'
         else:
-            df['class'] = df['class'].str.replace(str(LOC), '')
+            predicate = attrs[by].predicate
+            return f'?s {predicate} ?x .'
 
+    def _query(self, query: str) -> pd.DataFrame:
+        wrapper = self.sparql
+        wrapper.setQuery(query)
+        result = wrapper.queryAndConvert()
+        _csv = StringIO(result.decode('utf-8'))
+        return pd.read_csv(_csv, sep=",", dtype='string')
+
+    def getEntities(
+        self,
+        entity_name: str = BASE,
+        select_only: Optional[str] = None,
+        by: Optional[Union[str, tuple[str, ...]]] = None,
+        value: Any = None
+    ) -> Union[pd.DataFrame, Iterable[Any]]:
+        select_clause = "SELECT {}"
+        where_clause = """
+WHERE {{
+        {}
+}} """
+        query_map = self.query_dict[entity_name]
+        select, where = list(query_map[0]), list(query_map[1])
+
+        if select_only:
+            select = ['?' + select_only]
+            where = where[:1] + [triple for triple in where[1:] if select_only in triple or 'class' in triple]
+
+        if by and value:
+            value_clause = '\n        VALUES ?x {{ {} }}'
+            filter_condition = self._filter_map(entity_name, by)
+            where.append(filter_condition)
+            where.append(value_clause.format(id_join(value)))
+
+        query = self.prefixes + select_clause.format(' '.join(select)) + where_clause.format('\n        '.join(where))
+        df = self._query(query)
+
+        if select_only:
+            return df.iloc[:, 0].to_numpy()
+
+        for col, uri in self.uri_strip[entity_name]:
+            df[col] = df[col].str.replace(uri, '')
+
+        cols_to_sort, sort_key = self.sort_by[entity_name]
+        return df.sort_values(by=cols_to_sort, key=sort_key, ignore_index=True)
+
+    def getById(self, identifier: str) -> pd.DataFrame:
+        df = self.getEntities(by='identifier', value=identifier)
+        if df.empty:
+            df = self.getEntities('Person', by='identifier', value=identifier)
         return df
 
     def getAllPeople(self) -> pd.DataFrame:
-        query = PERSON_QUERY + '} ORDER BY ?name'
-        df = get(self.getDbPathOrUrl(), query, True).astype('string')
-
-        return df
+        return self.getEntities('Person')
 
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
-        query = OBJECT_QUERY + '}'
+        return self.getEntities()
 
-        # Sort the DataFrame by identifier using an alphanumeric sort key
-        df = get(self.getDbPathOrUrl(), query, True) \
-            .astype('string') \
-            .sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
-        df['class'] = df['class'].str.replace(str(LOC), '')
-
-        return df
-
-    def getAuthorsOfCulturalHeritageObject(self, objectId: str | list[str]) -> pd.DataFrame:
-        objectId = id_join(objectId)
-        # The ^ symbol in SPARQL reverses the subject and object of the triple
-        # pattern, concisely allowing the subject of the previous triples to
-        # be used as the object of the current triple. In this case, this
-        # chained triple pattern means that the person identified by
-        # ?internalId is the creator (object of dc:creator predicate) of an
-        # implicit cultural heritage object with identifier 'objectId'.
-        query = PERSON_QUERY + \
-        f"""               ^dc:creator / dc:identifier ?objectId .
-
-        VALUES ?objectId {{ {objectId} }}
-
-    }} ORDER BY ?name
-        """
-        df = get(self.getDbPathOrUrl(), query, True).astype('string')
-
-        return df
+    def getAuthorsOfCulturalHeritageObject(self, objectId: Union[str, List[str]]) -> pd.DataFrame:
+        return self.getEntities('Person', by=('CHO', 'hasAuthor', 'identifier'), value=objectId)
 
     def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> pd.DataFrame:
-        personId = id_join(personId)
-        # The / symbol in SPARQL allows for an implicit unnamed node that is
-        # the object of the first triple pattern and the subject of the
-        # second, which in this case is an author with a certain 'personId'.
-        # Because 'personId' was not linked to ?hasAuthor, the query retrieves
-        # all the authors associated with the cultural heritage object,
-        # regardless of which specific author was used to select that object.
-        query = OBJECT_QUERY + \
-        f"""
-                ?internalId dc:creator / dc:identifier ?personId .
-        VALUES ?personId {{ {personId} }}
-    }}
-        """
-        df = get(self.getDbPathOrUrl(), query, True) \
-            .astype('string') \
-            .sort_values(by='identifier', key=lambda x: x.map(key), ignore_index=True)
-        df['class'] = df['class'].str.replace(str(LOC), '')
-
-        return df
+        return self.getEntities(by=('hasAuthor', 'identifier'), value=personId)

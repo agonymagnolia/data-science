@@ -1,4 +1,4 @@
-from streamlod.domain.identifiable_entity import (
+from streamlod.entities.identifiable_entity import (
     IdentifiableEntity,
     Person,
     CulturalHeritageObject,
@@ -14,7 +14,7 @@ from streamlod.domain.identifiable_entity import (
     Map
 )
 
-from streamlod.domain.activity import (
+from streamlod.entities.activity import (
     Activity,
     Acquisition,
     Processing,

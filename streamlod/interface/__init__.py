@@ -1,6 +1,6 @@
 from streamlod.interface.print import (
     single_print,
-    multi_print,
+    stack_print,
     title_print,
     subtitle_print,
     rich_print,
@@ -9,7 +9,7 @@ from streamlod.interface.print import (
 
 __all__ = [
     'single_print',
-    'multi_print',
+    'stack_print',
     'title_print',
     'subtitle_print',
     'rich_print',

@@ -19,7 +19,18 @@ def key(val: str) -> tuple[int, Union[int, str]]:
     Integers and strings are then compared separately within each group
     (numbers with numbers and letters with letters).
     """
-    if val.isdigit():
-        return (0, int(val))
+    if isinstance(val, str):
+        if val.isdigit():
+            return (0, int(val))
+        else:
+            return (1, val)
     else:
-        return (1, val)
+        return val
+
+rank = {
+    'Acquisition': 1,
+    'Processing': 2,
+    'Modelling': 3,
+    'Optimising': 4,
+    'Exporting': 5
+}

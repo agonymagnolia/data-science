@@ -1,16 +1,9 @@
 from typing import Union, Optional, Set
 
-from streamlod.domain.identifiable_entity import CulturalHeritageObject
+from streamlod.entities.identifiable_entity import CulturalHeritageObject
+from streamlod.utils import rank
 
 class Activity:
-    subclass_order = {
-        'Acquisition': 1,
-        'Processing': 2,
-        'Modelling': 3,
-        'Optimising': 4,
-        'Exporting': 5
-    }
-
     def __init__(
         self,
         refersTo: CulturalHeritageObject,
@@ -63,9 +56,7 @@ class Activity:
         if self._refersTo != other._refersTo:
             return self._refersTo < other._refersTo
         else:
-            self_rank = self.subclass_order[self.__class__.__name__]
-            other_rank = self.subclass_order[other.__class__.__name__]
-            return self_rank < other_rank
+            return rank[self.__class__.__name__] < rank[other.__class__.__name__]
 
     def __hash__(self):
         return hash((

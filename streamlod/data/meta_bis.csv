@@ -25,7 +25,7 @@ Id,Type,Title,Date,Author,Owner,Place
 24,Printed material,Anatomy of a chicken,1603,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
 25,Manuscript plate,Chick in an eggshell,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
 26,Printed material,Dissected swan,1603,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
-27,Manuscript plate,Human hermaphrodite,,"Eugenides, Jeffrey (VIAF:37015518)",BUB,Bologna
+27,Manuscript plate,Human hermaphrodite,,"Ardhanarishvara (VIAF:30342047)",BUB,Bologna
 28,Specimen,Sea coconut,1500-1599,,Museo di Palazzo Poggi,Bologna
 29,Model,Basilisk,1600-1699,"Calzolari, Francesco (VIAF:52741381)",Museo di Storia Naturale di Verona,Verona
 30,Printed volume,Cyclops,1642,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
@@ -33,7 +33,8 @@ Id,Type,Title,Date,Author,Owner,Place
 32,Manuscript plate,Heads of a two-headed calf,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
 33,Specimen,"Cattle (Linnaeus, 1758)",,,Sistema Museale di Ateneo di Bologna,Ozzano dell'Emilia
 34,Specimen,"Narwhal (Linnaeus, 1758) ",1600-1699,,Museo di Palazzo Poggi,Bologna
-35,Manuscript plate,,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
-36,,Desert horned viper and vipera ammodytes,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
+35,Manuscript plate,Desert horned viper and vipera ammodytes,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
+36,Manusscript plate,Desert horned viper and vipera ammodytes,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
+37,Manuscript plate,,1500-1599,"Aldrovandi, Ulisse (VIAF:100190422)",BUB,Bologna
 alo,Herbarium,Aloe,,"Mansfield, Katherine (VIAF:41843502)",Biblioteca Universitaria di Sassari,Sassari
 alo,Herbarium,Aloe,,"Blacc, Aloe (VIAF:7155985)",Biblioteca Universitaria di Sassari,Sassari
