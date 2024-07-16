@@ -3,7 +3,7 @@ from typing import List
 from streamlod.mashups.basic_mashup import BasicMashup
 from streamlod.entities import Person, CulturalHeritageObject, Activity
 
-class AdvancedMashup(BasicMashup): # Lin
+class AdvancedMashup(BasicMashup):
     """
     The AdvancedMashup class manages two-way filter queries to multiple graph or relational databases
     and integrates the data into unified Python objects.

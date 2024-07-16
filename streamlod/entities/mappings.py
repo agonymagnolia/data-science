@@ -36,7 +36,7 @@ IDE: Dict[str, EntityMap] = {
             'class': Attribute(0, True, None, 'rdf:type', 'loc'),
             'title': Attribute(2, True, None, 'dc:title', str),
             'date': Attribute(5, False, None, 'dc:date', str),
-            'hasAuthor': Attribute(6, False, '; ', 'dc:creator', Relation('Person', r"^(?P<name>.+?)\s*?\(\s*(?P<identifier>.+?)\s*\)\s*$")),
+            'hasAuthor': Attribute(6, False, '; ', 'dc:creator', Relation('Person', r"^(?P<name>.*?)\s*?\(\s*(?P<identifier>.+?)\s*\)\s*$")),
             'owner': Attribute(3, True, None, 'edm:currentLocation', str),
             'place': Attribute(4, True, None, 'dc:coverage', str)
         },
@@ -46,8 +46,8 @@ IDE: Dict[str, EntityMap] = {
     'Person': {
         'entity': 'edm:Agent',
         'attributes': {
-            'identifier': Attribute(1, True, None, 'dc:identifier', str),
-            'name': Attribute(2, True, None, 'foaf:name', str)
+            'identifier': Attribute(0, True, None, 'dc:identifier', str),
+            'name': Attribute(1, True, None, 'foaf:name', str)
         },
         'sort_by': 'name',
         'key': None,
@@ -95,15 +95,11 @@ class MapMeta(type):
         cls.sort_by = {entity_name: (cls._sort_map(entity_name), mapping['key']) for entity_name, mapping in IDE.items()}
 
         # Columns to be stipped of the uri per entity DataFrame
-        cls.uri_strip = {entity_name: cls._uri_map(mapping) for entity_name, mapping in IDE.items()}
+        cls.uri_strip = {entity_name: cls._uri_map(entity_name) for entity_name in IDE}
 
     def _query_map(cls, entity_name: str) -> tuple[List[str], List[str]]:
         select, where = [], []
-        optional_clause = """
-    OPTIONAL {{
-        {}
-    }}
-"""
+        optional_clause = "OPTIONAL {{ {} }}"
         entity_map = IDE[entity_name]
         entity, attrs = entity_map['entity'], entity_map['attributes']
 
@@ -131,7 +127,7 @@ class MapMeta(type):
             else:
                 select.append(select_attr)
 
-            if attr.required:
+            if name == 'class' or name == 'identifier':
                 where.append(triple)
             else:
                 where.append(optional_clause.format(triple))
@@ -143,15 +139,19 @@ class MapMeta(type):
         sort_by, attrs = entity_map['sort_by'], entity_map['attributes']
         result = [sort_by]
         for name, attr in attrs.items():
-            if isinstance((rel := attr.vtype), tuple):
+            if isinstance((rel := attr.vtype), Relation):
                 entity_name2 = rel.name
                 result += [f'{entity_name2.lower()[:1]}_{name}' for name in cls._sort_map(entity_name2)]
         return result
 
-    def _uri_map(cls, mapping: EntityMap) -> List[tuple[str, str]]:
+    def _uri_map(cls, entity_name: str) -> List[tuple[str, str]]:
         result = []
-        for name, attr in mapping['attributes'].items():
+        attrs = IDE[entity_name]['attributes']
+        for name, attr in attrs.items():
             if isinstance(attr.vtype, str):
                 uri = NS[attr.vtype]
                 result.append((name, str(uri)))
+            elif isinstance((rel := attr.vtype), Relation):
+                entity_name2 = rel.name
+                result += [(f'{entity_name2.lower()[:1]}_{name}', uri) for name, uri in cls._uri_map(rel.name)]
         return result

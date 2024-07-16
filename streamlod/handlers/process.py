@@ -2,17 +2,16 @@ from typing import Union, Any, List, Dict, Set, Mapping, Iterable
 import pandas as pd
 import json
 import sqlite3
-from urllib.request import pathname2url
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
 from streamlod.entities.mappings import ACTIVITIES
 from streamlod.utils import key, id_join
 
 
-class ProcessDataUploadHandler(UploadHandler): # Alberto
+class ProcessDataUploadHandler(UploadHandler):
     def __init__(self):
         super().__init__()
-        # Initialize an empty set to track the activities present in the database
+        # Initialize an empty set to track the activity ids present in the database
         self.identifiers: Set[str] = set()
 
     def _json_map(self, activity: str) -> Dict[str, str]:
@@ -139,15 +138,18 @@ class ProcessDataUploadHandler(UploadHandler): # Alberto
             print(e)
             return False
 
-class ProcessDataQueryHandler(QueryHandler): # Anna
+class ProcessDataQueryHandler(QueryHandler):
 
     def getAttribute(
         self,
         activity_list: Iterable[str] = ACTIVITIES.keys(),
         attribute: str = 'refersTo',
         filter_condition: str = ''
-        ) -> List[Any]:
-        # Build subqueries for each activity and combine them with UNION
+    ) -> List[Any]:
+        """
+        Performs a unified query to retrieve the values of a column in all activity tables for the rows that match the condition.
+        """
+        # Build a query for each activity and combine them with UNION
         subqueries = []
         for name in activity_list:
             sql= f"""
@@ -157,7 +159,7 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
             subqueries.append(sql)
         query = '\nUNION\n'.join(subqueries) + ';'
 
-        # Execute the combined query and fetch the results
+        # Execute the combined query and fetche the results
         db = self.getDbPathOrUrl()
         with sqlite3.connect(db) as con:
             result = con.execute(query).fetchall()
@@ -169,12 +171,18 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
         self,
         activity_list: Iterable[str] = ACTIVITIES.keys(),
         filter_condition: str = ''
-        ) -> pd.DataFrame:
+    ) -> pd.DataFrame:
+        """
+        Retrieves data from multiple activity tables, linking each activity to its associated tools,
+        applies an optional filter condition, and returns it as a multi-index DataFrame with object IDs as the primary index,
+        attributes as lower-level columns and activities as the higher-level column index.
+        If no valid activities are found, an empty DataFrame is returned.
+        """
         activities = {}
 
         # Build and execute the query for each activity
         for name in activity_list:
-            attrs = list(ACTIVITIES[name])[:-1] # Exclude the 'tool' column
+            attrs = list(ACTIVITIES[name])[:-1] # Exclude the tool column
             cols = ", ".join(attrs)
             query = f"""
                 SELECT {cols}, GROUP_CONCAT(T.tool) AS tool
@@ -188,8 +196,8 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
             with sqlite3.connect(db) as con:
                 activity = pd.read_sql_query(query, con)
 
-            # Skip activity if the DataFrame is all NaNs (no instance fulfills the condition)
-            if activity.isnull().values.all():
+            # Skip activity if no instance fulfills the condition
+            if activity.empty:
                 continue
 
             # Split tool combined string in a set and set 'refersTo' as index
@@ -204,10 +212,10 @@ class ProcessDataQueryHandler(QueryHandler): # Anna
         return pd.concat(activities.values(), axis=1, join='outer', keys=activities.keys()) \
                  .sort_index(key=lambda x: x.map(key))
 
-    def getById(self, identifiers: Union[str, List[str]]) -> pd.DataFrame:
+    def getById(self, identifier: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string
-        identifiers = id_join(identifiers, ', ')
-        return self.getActivities(filter_condition=f'WHERE A.refersTo IN ({identifiers})')
+        identifier = id_join(identifier, ', ')
+        return self.getActivities(filter_condition=f'WHERE A.refersTo IN ({identifier})')
 
     def getAllActivities(self) -> pd.DataFrame:
         return self.getActivities()

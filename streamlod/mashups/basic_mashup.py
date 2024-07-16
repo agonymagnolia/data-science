@@ -17,13 +17,6 @@ class BasicMashup:
     """
     The BasicMashup class manages one-sided filter queries to multiple graph or relational databases
     and integrates the data into unified Python objects.
-
-    - For single match queries (e.g., getEntityById, getAuthorsOfCulturalHeritageObject), 
-      the iteration on the handler instances stops at the first result found.
-    - For multiple single matches (e.g., getCulturalHeritageObjectsByIds),
-      the search stops once all matches are found or all handlers have been queried.
-    - For other queries (e.g., getAllActivities, getCulturalHeritageObjectsAuthoredBy), 
-      results from all handlers are aggregated.
     """
     def __init__(self):
         self.metadataQuery = []
@@ -45,9 +38,9 @@ class BasicMashup:
         self.processQuery.append(handler)
         return True
 
-    def _normalizeDFs(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]], entity_name: str) -> pd.DataFrame:
+    def _normalize(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]], entity_name: str) -> pd.DataFrame:
         """
-        Normalize input DataFrame or list of DataFrames.
+        Normalizes input DataFrame or list of DataFrames.
 
         - If all DataFrames in the list are empty, returns an empty DataFrame.
         - If there is a single DataFrame it is returned as is.
@@ -60,54 +53,71 @@ class BasicMashup:
             elif len(non_empty_dfs) == 1:
                 df = non_empty_dfs[0]
             else:
-                df = self._concatDedupSort(non_empty_dfs, entity_name)
+                df = self._integrate(non_empty_dfs, entity_name)
         else:
             df = dfs
 
-        if entity_name == 'CHO':
-            df = df[~df.duplicated(['identifier', 'p_identifier'])]
-        elif entity_name == 'Person':
-            df = df[~df.duplicated('identifier')]
+        return self._validate(df, entity_name)
 
-        return df
-
-
-
-    def _concatDedupSort(self, dfs: List[pd.DataFrame], entity_name: str) -> pd.DataFrame:
+    def _integrate(self, dfs: List[pd.DataFrame], entity_name: str) -> pd.DataFrame:
         """
-        Concatenate DataFrames, remove duplicates, and sort based on the object class.
+        Concatenates DataFrames and sorts them again according to a class-dependent parameter.
+
+        Combines data from different databases: links activities on the same object and
+        adds missing data for authors or cultural objects.
+        Removing duplicate identifiers from the dataframe without first performing this integration
+        would result in the loss of this potentially valuable data.
         """
         df = pd.concat(dfs)
 
         match entity_name:
             case 'Person':
                 df = df.sort_values(by='name', ignore_index=True)
+                df.update(df.groupby('identifier').bfill())
             case 'CHO':
                 df = df.sort_values(by=['identifier', 'p_name'], key=lambda x: x.map(key), ignore_index=True)
                 df.update(df.groupby('identifier').bfill())
             case 'Activity':
-                df = df.sort_index(key=lambda x: x.map(key)).groupby(level=0).bfill()
-                df = df[~df.index.duplicated()]
+                df = df.sort_index(key=lambda x: x.map(key)) \
+                       .groupby(level=0).bfill()
                 df = df[sorted(df.columns, key=lambda x: rank[x[0]])]
 
         return df
 
+    def _validate(self, df: pd.DataFrame, entity_name: str) -> pd.DataFrame:
+        """
+        Removes duplicated entries and verifies all required attributes are defined for graph database data.
+        """
+        match entity_name:
+            case 'Person':
+                df = df[~df.duplicated('identifier') & df['name'].notna()] # Identifier was already required by the query
+            case 'CHO':
+                df = df[
+                    ~df.duplicated(['identifier', 'p_identifier']) & # Duplicates are evaluated on every subject-multivalue pair
+                    df[['title', 'owner', 'place']].notna().all(axis=1) & # Identifier and class were already required by the query
+                    ~(df['p_identifier'].notna() ^ df['p_name'].notna()) # Reversed XOR operator: either the author is fully defined or they are not
+                ]
+            case 'Activity':
+                df = df[~df.index.duplicated()]
+
+        return df
+       
     def toPerson(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Person]:
         """
-        Convert DataFrame(s) into a list of Person objects.
+        Converts DataFrame(s) into a list of Person objects.
         """
-        if (df := self._normalizeDFs(dfs, 'Person')).empty:
+        if (df := self._normalize(dfs, 'Person')).empty:
             return []
 
-        # Create Person objects from DataFrame rows
+        # Creates Person objects from DataFrame rows
         return [Person(*row) for row in df.to_numpy(dtype=object, na_value=None)]
 
     def toCHO(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[CulturalHeritageObject]:
         """
-        Convert DataFrame(s) into a list of CulturalHeritageObjects.
+        Converts DataFrame(s) into a list of CulturalHeritageObjects.
         """
         result: List[CulturalHeritageObject] = []
-        if (df := self._normalizeDFs(dfs, 'CHO')).empty:
+        if (df := self._normalize(dfs, 'CHO')).empty:
             return []
 
         object_id = '' # Variable to track the current object identifier
@@ -125,10 +135,10 @@ class BasicMashup:
 
     def toActivity(self, dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Activity]:
         """
-        Convert DataFrame(s) into a list of Activity objects.
+        Converts DataFrame(s) into a list of Activity objects.
         """
         result: List[Activity] = []
-        if (df := self._normalizeDFs(dfs, 'Activity')).empty:
+        if (df := self._normalize(dfs, 'Activity')).empty:
             return result
 
         objects, missing_ids = self.getCulturalHeritageObjectsByIds(df.index)
@@ -149,7 +159,7 @@ class BasicMashup:
 
         return result
 
-    def getEntityById(self, identifier: str) -> Union[IdentifiableEntity, None]: # Francesca
+    def getEntityById(self, identifier: str) -> Union[IdentifiableEntity, None]:
         dfs = []
         for handler in self.metadataQuery:
             if (df := handler.getById(identifier)).empty:
@@ -163,9 +173,9 @@ class BasicMashup:
         else:
             return None
 
-    def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> tuple[List[CulturalHeritageObject], Set[str]]: # Francesca
+    def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> tuple[List[CulturalHeritageObject], Set[str]]:
         """
-        Retrieve cultural heritage objects by their identifiers from multiple metadata handlers.
+        Retrieves cultural heritage objects by their identifiers from multiple metadata handlers.
 
         In addition to the object list, the set of identifiers that were not found is also returned
         for alignment purposes during the construction of Activity objects.
@@ -180,46 +190,46 @@ class BasicMashup:
 
         return self.toCHO(dfs), missing_ids
 
-    def getAllPeople(self) -> List[Person]: # Francesca
+    def getAllPeople(self) -> List[Person]:
         dfs = [handler.getAllPeople() for handler in self.metadataQuery]
         return self.toPerson(dfs)
 
-    def getAllCulturalHeritageObjects(self) -> List[CulturalHeritageObject]: # Francesca
+    def getAllCulturalHeritageObjects(self) -> List[CulturalHeritageObject]:
         dfs = [handler.getAllCulturalHeritageObjects() for handler in self.metadataQuery]
         return self.toCHO(dfs)
 
-    def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> List[Person]: # Francesca
+    def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> List[Person]:
         dfs = [handler.getAuthorsOfCulturalHeritageObject(objectId) for handler in self.metadataQuery]
         return self.toPerson(dfs)
 
-    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> List[CulturalHeritageObject]: # Francesca
+    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> List[CulturalHeritageObject]:
         dfs = [handler.getCulturalHeritageObjectsAuthoredBy(personId) for handler in self.metadataQuery]
         return self.toCHO(dfs)
 
-    def getAllActivities(self) -> List[Activity]: # Lin
+    def getAllActivities(self) -> List[Activity]:
         dfs = [handler.getAllActivities() for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getActivitiesByResponsibleInstitution(self, partialName: str) -> List[Activity]: # Lin
+    def getActivitiesByResponsibleInstitution(self, partialName: str) -> List[Activity]:
         dfs = [handler.getActivitiesByResponsibleInstitution(partialName) for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getActivitiesByResponsiblePerson(self, partialName: str) -> List[Activity]: # Lin
+    def getActivitiesByResponsiblePerson(self, partialName: str) -> List[Activity]:
         dfs = [handler.getActivitiesByResponsiblePerson(partialName) for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getActivitiesUsingTool(self, partialName: str) -> List[Activity]: # Lin
+    def getActivitiesUsingTool(self, partialName: str) -> List[Activity]:
         dfs = [handler.getActivitiesUsingTool(partialName) for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getActivitiesStartedAfter(self, date: str) -> List[Activity]: # Lin
+    def getActivitiesStartedAfter(self, date: str) -> List[Activity]:
         dfs = [handler.getActivitiesStartedAfter(date) for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getActivitiesEndedBefore(self, date:str) -> List[Activity]: # Lin
+    def getActivitiesEndedBefore(self, date:str) -> List[Activity]:
         dfs = [handler.getActivitiesEndedBefore(date) for handler in self.processQuery]
         return self.toActivity(dfs)
 
-    def getAcquisitionsByTechnique(self, partialName: str) -> List[Activity]: # Lin
+    def getAcquisitionsByTechnique(self, partialName: str) -> List[Activity]:
         dfs = [handler.getAcquisitionsByTechnique(partialName) for handler in self.processQuery]
         return self.toActivity(dfs)

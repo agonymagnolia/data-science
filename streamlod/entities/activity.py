@@ -127,8 +127,7 @@ class Acquisition(Activity):
         yield "end", self.end
 
     def __eq__(self, other) -> bool:
-        return (super().__eq__(other) and
-                self.technique == self.technique)
+        return super().__eq__(other) and self.technique == other.technique
 
     def __hash__(self):
         return hash((

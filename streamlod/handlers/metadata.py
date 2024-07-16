@@ -1,5 +1,6 @@
 from typing import Union, List, Set, Generator, Optional, Any, Iterable
 import pandas as pd
+import numpy as np
 from rdflib import Graph
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from urllib.parse import quote_plus
@@ -169,10 +170,10 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
         self.sparql: Optional[SPARQLWrapper] = None
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str) -> bool:
-        if not super().setDbPathOrUrl(newDbPathOrUrl):
+        if not super().setDbPathOrUrl(newDbPathOrUrl): # Set new endpoint
             return False
 
-        # Set query wrapper around sparql endpoint
+        # Initialize sparql wrapper around endpoint
         endpoint = self.getDbPathOrUrl()
         self.sparql = SPARQLWrapper(endpoint, returnFormat='csv')
         self.sparql.setOnlyConneg(True)
@@ -216,7 +217,7 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
         select_only: Optional[str] = None,
         by: Optional[Union[str, tuple[str, ...]]] = None,
         value: Any = None
-    ) -> Union[pd.DataFrame, Iterable[Any]]:
+    ) -> Union[pd.DataFrame, np.ndarray[Any]]:
         select_clause = "SELECT {}"
         where_clause = """
 WHERE {{
