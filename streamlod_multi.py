@@ -7,15 +7,15 @@ Pip install rich for a better experience
 
 """
 
-metadata_csv_path = 'streamlod/data/meta.csv'
-metadata_csv_path_bis = 'streamlod/data/meta_bis.csv'
+metadata_csv_path = 'streamlod/data/meta1.csv'
+metadata_csv_path_bis = 'streamlod/data/meta1bis.csv'
 metadata_csv_path2 = 'streamlod/data/meta2.csv'
-process_json_path = 'streamlod/data/process.json'
-process_json_path_bis = 'streamlod/data/process_bis.json'
+process_json_path = 'streamlod/data/process1.json'
+process_json_path_bis = 'streamlod/data/process1bis.json'
 process_json_path2 = 'streamlod/data/process2.json'
 metadata_endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'
 metadata_endpoint2 = 'http://127.0.0.1:19999/blazegraph/sparql'	# To access the second instance: java -server -Xmx4g -Djetty.port=19999 -jar blazegraph.jar
-process_db_path = 'streamlod/databases/relational.db'
+process_db_path = 'streamlod/databases/relational1.db'
 process_db_path2 = 'streamlod/databases/relational2.db'
 
 

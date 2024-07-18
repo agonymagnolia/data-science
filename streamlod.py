@@ -8,11 +8,11 @@ Pip install rich for a better experience
 
 """
 
-metadata_csv_path = 'streamlod/data/meta.csv'
-process_json_path = 'streamlod/data/process.json'
+metadata_csv_path = 'streamlod/data/meta1.csv'
+process_json_path = 'streamlod/data/process1.json'
 process_json_path2 = 'streamlod/data/process2.json'
 metadata_endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'
-process_db_path = 'streamlod/databases/relational.db'
+process_db_path = 'streamlod/databases/relational1.db'
 
 metadata_uh = MetadataUploadHandler()
 process_uh = ProcessDataUploadHandler()

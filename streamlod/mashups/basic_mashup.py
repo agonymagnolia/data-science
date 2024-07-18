@@ -160,18 +160,25 @@ class BasicMashup:
         return result
 
     def getEntityById(self, identifier: str) -> Union[IdentifiableEntity, None]:
-        dfs = []
+        obj_dfs, people_dfs = [], []
         for handler in self.metadataQuery:
-            if (df := handler.getById(identifier)).empty:
+            df = handler.getById(identifier)
+            if df.empty:
                 continue
-            elif 'class' in df: # The result is an object
-                dfs.append(df)
+
+            if 'class' in df.columns: # The result is an object
+                obj_dfs.append(df)
             else:
-                return self.toPerson(df)[0]
-        if dfs:
-            return self.toCHO(dfs)[0]
+                people_dfs.append(df)
+
+        if obj_dfs:
+            result = self.toCHO(obj_dfs)
+        elif people_dfs:
+            result = self.toPerson(people_dfs)
         else:
             return None
+
+        return result[0] if result else None # Check result again as constructors might return an empty list for invalid data.
 
     def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> tuple[List[CulturalHeritageObject], Set[str]]:
         """
