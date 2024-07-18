@@ -1,9 +1,0 @@
-# Byte-compiled
-__pycache__/
-
-# Mypy
-.mypy_cache/
-
-# Others
-impl*
-test.py
