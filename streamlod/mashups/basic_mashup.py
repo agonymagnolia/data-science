@@ -59,6 +59,14 @@ class BasicMashup:
 
         return self._validate(df, entity_name)
 
+    def _selective_bfill(self, group: pd.DataFrame, activity_names: List[str]) -> pd.DataFrame:
+        for name in activity_names:
+            activity = group[name]
+            if activity.iloc[0].isna().all():
+                group[name] = group[name].infer_objects(copy=False).bfill(axis=0)
+
+        return group.iloc[0,:]
+
     def _integrate(self, dfs: List[pd.DataFrame], entity_name: str) -> pd.DataFrame:
         """
         Concatenates DataFrames and sorts them again according to a class-dependent parameter.
@@ -78,8 +86,9 @@ class BasicMashup:
                 df = df.sort_values(by=['identifier', 'p_name'], key=lambda x: x.map(key), ignore_index=True)
                 df.update(df.groupby('identifier').bfill())
             case 'Activity':
+                activity_names = df.columns.get_level_values(0).unique()
                 df = df.sort_index(key=lambda x: x.map(key)) \
-                       .groupby(level=0).bfill()
+                       .groupby(level=0).apply(lambda group: self._selective_bfill(group, activity_names))
                 df = df[sorted(df.columns, key=lambda x: rank[x[0]])]
 
         return df

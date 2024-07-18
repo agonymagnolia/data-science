@@ -11,7 +11,7 @@ from pandas import DataFrame
 
 from streamlod.handlers import MetadataUploadHandler, ProcessDataUploadHandler, MetadataQueryHandler, ProcessDataQueryHandler
 from streamlod.mashups import AdvancedMashup
-from streamlod.entities import Person, CulturalHeritageObject, Activity, Acquisition
+from streamlod.entities import Person, CulturalHeritageObject, Activity, Acquisition, Optimising
 
 class TestIncompleteData(unittest.TestCase):
 
@@ -74,7 +74,7 @@ class TestIncompleteData(unittest.TestCase):
         people = self.m.getAllPeople()
         for person in people:
             self.assertIsInstance(person.identifier, str)
-            self.assertIsInstance(person.name, str)         
+            self.assertIsInstance(person.name, str)
 
     def test_02_metadata_integration(self):
         objs = {}
@@ -99,17 +99,72 @@ class TestIncompleteData(unittest.TestCase):
         # If class or identifier is missing/incorrect the record is not added to the db
         self.assertIsNone(objs[5].date)
 
-    def test_03_get_author_correctness(self):
+    def test_03_author_correctness(self):
         authors = self.m.getAllPeople()
         for author in authors:
             authoredby = self.m.getCulturalHeritageObjectsAuthoredBy(author.identifier)
             for obj in authoredby:
                 self.assertIn(author, obj.hasAuthor)
 
-    def test_04_equivalence_of_activity_refersTo_and_objects(self):
+    def test_04_process_completeness(self):
+        activities = self.m.getAllActivities()
+        for activity in activities:
+            self.assertIsInstance(activity.institute, str)
+            self.assertIsInstance(activity.refersTo, CulturalHeritageObject)
+            self.assertTrue(isinstance(activity.person, str) or activity.person is None)
+            self.assertTrue(isinstance(activity.start, str) or activity.start is None)
+            self.assertTrue(isinstance(activity.end, str) or activity.end is None)
+            tools = activity.tool
+            self.assertIsInstance(tools, set)
+            for tool in tools:
+                self.assertIsInstance(tool, str)
+            if isinstance(activity, Acquisition):
+                self.assertIsInstance(activity.technique, str)
+
+    def test_05_process_integration(self):
+        dfs1 = []
+        for pqh in self.m.processQuery:
+            dfs1.append(pqh.getById('1'))
+        p1 = self.m.toActivity(dfs1)
+
+        dfs2 = []
+        for pqh in self.m.processQuery:
+            dfs2.append(pqh.getById('2'))
+        p2 = self.m.toActivity(dfs2)
+
+        dfs3 = []
+        for pqh in self.m.processQuery:
+            dfs3.append(pqh.getById('3'))
+        p3 = self.m.toActivity(dfs3)
+
+        # Technique from db2 because in db1 activity was discarded
+        self.assertEqual(p1[0].technique, 'Photogrammetry')
+
+        # Subsequent pushes on same db
+        self.assertIsNone(p1[1].person)
+
+        # Integration of data from different dbs only for whole activity, not single values
+        self.assertIsNone(p1[1].end)
+        self.assertEqual(p1[1].tool, set())
+
+        # Institute from second push on db1 because in first push the activity was discarded
+        self.assertEqual(p1[2].institute, 'Philology')
+
+        # Integration of new type of activity on same object from different db
+        self.assertTrue(any(isinstance(activity, Optimising) for activity in p2))
+
+        # Not compliant institute datatype
+        self.assertFalse(any(isinstance(activity, Acquisition) for activity in p3))
+
+    def test_06_refersTo_correctness(self):
         objects = self.m.getAllCulturalHeritageObjects()
         for activity in self.m.getAllActivities():
             self.assertIn(activity.refersTo, objects)
+
+    def test_07_process_order(self):
+        activities = self.m.getAllActivities()
+        sorted_activities = sorted(activities)
+        self.assertEqual(activities, sorted_activities)
 
 if __name__ == '__main__':
     unittest.main()

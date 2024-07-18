@@ -80,8 +80,7 @@ class ProcessDataUploadHandler(UploadHandler):
             try:
                 activity = df.rename(columns=self._json_map(name.lower()))[cols]
             except KeyError as e:
-                print(e)
-                return False
+                continue
 
             # Separate tool column and trim spaces in each activity column
             tool = activity.pop('tool')
@@ -95,7 +94,7 @@ class ProcessDataUploadHandler(UploadHandler):
             # Drop rows not compliant with the data model
             validate = [attr for attr, required in attrs.items() if required]
             activity.replace(r'', pd.NA, inplace=True)
-            activity = activity[activity[validate].notna().all(axis=1)]
+            activity = activity[(activity[validate].notna() & activity.map(lambda x: isinstance(x, str))).all(axis=1)]
 
             if activity.empty:
                 continue
@@ -149,20 +148,31 @@ class ProcessDataQueryHandler(QueryHandler):
         """
         Performs a unified query to retrieve the values of a column in all activity tables for the rows that match the condition.
         """
-        # Build a query for each activity and combine them with UNION
+        # Build a query for each activity table present in the db
         subqueries = []
-        for name in activity_list:
-            sql= f"""
-                SELECT {attribute}
-                FROM {name}
-                {filter_condition}"""
-            subqueries.append(sql)
-        query = '\nUNION\n'.join(subqueries) + ';'
-
-        # Execute the combined query and fetche the results
         db = self.getDbPathOrUrl()
+
         with sqlite3.connect(db) as con:
-            result = con.execute(query).fetchall()
+            cursor = con.cursor()
+
+            # Check for the existence of each table before adding its query
+            for name in activity_list:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,))
+                if cursor.fetchone(): # If the table exists in the db
+                    sql = f"""
+                        SELECT {attribute}
+                        FROM {name}
+                        {filter_condition}"""
+                    subqueries.append(sql)
+
+            if not subqueries:
+                return []
+
+            # Combine subqueries using UNION
+            query = '\nUNION\n'.join(subqueries) + ';'
+
+            # Execute the combined query and fetch the results
+            result = cursor.execute(query).fetchall()
 
         # Return a list of the attribute values
         return [row[0] for row in result]
@@ -179,6 +189,7 @@ class ProcessDataQueryHandler(QueryHandler):
         If no valid activities are found, an empty DataFrame is returned.
         """
         activities = {}
+        db = self.getDbPathOrUrl()
 
         # Build and execute the query for each activity
         for name in activity_list:
@@ -192,9 +203,11 @@ class ProcessDataQueryHandler(QueryHandler):
                 {filter_condition}
                 GROUP BY {cols};
                 """
-            db = self.getDbPathOrUrl()
-            with sqlite3.connect(db) as con:
-                activity = pd.read_sql_query(query, con)
+            try:
+                with sqlite3.connect(db) as con:
+                    activity = pd.read_sql_query(query, con)
+            except pd.errors.DatabaseError:
+                continue # Activity table not found
 
             # Skip activity if no instance fulfills the condition
             if activity.empty:
