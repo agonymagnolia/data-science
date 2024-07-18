@@ -1,11 +1,3 @@
-"""
-To run the test navigate to data-science folder and run
-
-    python -m unittest discover -v -s streamlod/tests
-
-after running the Blazegraph database
-"""
-
 # -*- coding: utf-8 -*-
 # Copyright (c) 2023, Silvio Peroni <essepuntato@gmail.com>
 #
@@ -23,7 +15,6 @@ after running the Blazegraph database
 import unittest
 from os import sep
 from pandas import DataFrame
-
 from streamlod.handlers import MetadataUploadHandler, ProcessDataUploadHandler, MetadataQueryHandler, ProcessDataQueryHandler
 from streamlod.mashups import AdvancedMashup
 from streamlod.entities import Person, CulturalHeritageObject, Activity, Acquisition
@@ -37,9 +28,9 @@ class TestProjectBasic(unittest.TestCase):
     # the SPARQL endpoint must be updated depending on how you launch it - currently, it is
     # specified the URL introduced during the course, which is the one used for a standard
     # launch of the database.
-    metadata = 'streamlod' + sep + 'data' + sep + 'meta1.csv'
-    process = 'streamlod' + sep + 'data' + sep + 'process1.json'
-    relational = 'streamlod' + sep + 'databases' + sep + 'relational1.db'
+    metadata = 'streamlod' + sep + 'data' + sep + 'meta.csv'
+    process = 'streamlod' + sep + 'data' + sep + 'process.json'
+    relational = 'streamlod' + sep + 'databases' + sep + 'relational.db'
     graph = 'http://127.0.0.1:9999/blazegraph/sparql'
     
     def test_01_MetadataUploadHandler(self):
@@ -170,7 +161,4 @@ class TestProjectBasic(unittest.TestCase):
         r = am.getAuthorsOfObjectsAcquiredInTimeFrame("1088-01-01", "2029-01-01")
         self.assertIsInstance(r, list)
         for i in r:
-            self.assertIsInstance(i, Person)
-
-if __name__ == '__main__':
-    unittest.main()
+            self.assertIsInstance(i, Person)   
