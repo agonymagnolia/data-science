@@ -172,7 +172,10 @@ class ProcessDataQueryHandler(QueryHandler):
             query = '\nUNION\n'.join(subqueries) + ';'
 
             # Execute the combined query and fetch the results
-            result = cursor.execute(query).fetchall()
+            try:
+                result = cursor.execute(query).fetchall()
+            except sqlite3.OperationalError: # Attribute column does not exist
+                return []
 
         # Return a list of the attribute values
         return [row[0] for row in result]

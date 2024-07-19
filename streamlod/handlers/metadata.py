@@ -14,7 +14,7 @@ from streamlod.entities.mappings import IDE, BASE, NS, Relation, MapMeta
 from streamlod.utils import id_join, key
 
 
-class MetadataUploadHandler(UploadHandler): # Francesca
+class MetadataUploadHandler(UploadHandler):
     def __init__(self):
         super().__init__()
         self.store = SPARQLUpdateStore(autocommit=False, context_aware=False) # Database connection only on commit

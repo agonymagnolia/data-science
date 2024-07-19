@@ -60,12 +60,17 @@ class BasicMashup:
         return self._validate(df, entity_name)
 
     def _selective_bfill(self, group: pd.DataFrame, activity_names: List[str]) -> pd.DataFrame:
+        """
+        Performs backward filling on a column subset within each group of rows if all values in the first row are NaN.
+        This is done to fill in missing values for the same activity type on the same cultural heritage object across different databases.
+        """
+        is_undefined = group.iloc[0].isna() # Boolean mask on the first row of the same-id group
         for name in activity_names:
-            activity = group[name]
-            if activity.iloc[0].isna().all():
-                group[name] = group[name].infer_objects(copy=False).bfill(axis=0)
+            if is_undefined[name].all(): # If all values of the activity are NaNs
+                # Perform backward filling on those columns
+                group[name] = group[name].infer_objects(copy=False).bfill(axis=0) # Inferring data types is required to ensure that downcasting after bfill is handled correctly
 
-        return group.iloc[0,:]
+        return group.iloc[0] # Only the first row of the group is returned
 
     def _integrate(self, dfs: List[pd.DataFrame], entity_name: str) -> pd.DataFrame:
         """
@@ -115,7 +120,8 @@ class BasicMashup:
         """
         Converts DataFrame(s) into a list of Person objects.
         """
-        if (df := self._normalize(dfs, 'Person')).empty:
+        df = self._normalize(dfs, 'Person')
+        if df.empty:
             return []
 
         # Creates Person objects from DataFrame rows
@@ -125,11 +131,13 @@ class BasicMashup:
         """
         Converts DataFrame(s) into a list of CulturalHeritageObjects.
         """
-        result: List[CulturalHeritageObject] = []
-        if (df := self._normalize(dfs, 'CHO')).empty:
+        df = self._normalize(dfs, 'CHO')
+        if df.empty:
             return []
 
+        result: List[CulturalHeritageObject] = []
         object_id = '' # Variable to track the current object identifier
+
         for row in df.to_numpy(dtype=object, na_value=None):
             # Create a new object if the identifier is different from the previous row
             if object_id != row[1]:
@@ -146,18 +154,21 @@ class BasicMashup:
         """
         Converts DataFrame(s) into a list of Activity objects.
         """
-        result: List[Activity] = []
-        if (df := self._normalize(dfs, 'Activity')).empty:
-            return result
+        df = self._normalize(dfs, 'Activity')
+        if df.empty:
+            return []
 
+        result: List[Activity] = []
         objects, missing_ids = self.getCulturalHeritageObjectsByIds(df.index)
+
         # Map activity names to their corresponding classes and attribute counts
         row_map = [
             (getattr(entities, activity_name), len(ACTIVITIES[activity_name]) - 1) # Do not count 'refersTo'
             for activity_name in df.columns.get_level_values(0).unique()
         ]
-        array = df[~df.index.isin(missing_ids)].to_numpy(dtype=object, na_value=None)
+
         # Iterate through the DataFrame rows, creating Activity instances and linking them with cultural heritage objects
+        array = df[~df.index.isin(missing_ids)].to_numpy(dtype=object, na_value=None)
         for obj, row in zip(objects, array):
             index = 0
             for activity_class, step in row_map:
@@ -187,7 +198,7 @@ class BasicMashup:
         else:
             return None
 
-        return result[0] if result else None # Check result again as constructors might return an empty list for invalid data.
+        return result[0] if result else None # Check result again as constructors might return an empty list for invalid data
 
     def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> tuple[List[CulturalHeritageObject], Set[str]]:
         """
@@ -199,7 +210,8 @@ class BasicMashup:
         dfs = []
         identifiers, missing_ids = set(identifiers), set(identifiers)
         for handler in self.metadataQuery:
-            if (df := handler.getEntities(by='identifier', value=identifiers)).empty:
+            df = handler.getEntities(by='identifier', value=identifiers)
+            if df.empty:
                 continue
             missing_ids -= set(df['identifier'])
             dfs.append(df)
