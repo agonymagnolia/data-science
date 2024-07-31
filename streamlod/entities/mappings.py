@@ -1,6 +1,10 @@
-from typing import NamedTuple, Union, Dict, List
+from typing import NamedTuple, Union, Dict, List, TypeVar, TypeAlias, Callable, TypedDict, Optional, Iterable
 from rdflib.namespace import Namespace, DC, FOAF, RDF, RDFS
+import pandas as pd
 from streamlod.utils import key
+
+T = TypeVar('T')
+Some: TypeAlias = T | Iterable[T]
 
 # Namedtuples
 class Relation(NamedTuple):
@@ -10,12 +14,17 @@ class Relation(NamedTuple):
 class Attribute(NamedTuple):
     order: int # Attribute order for output DataFrame and object initialization
     required: bool
-    sep: Union[str, None] # Separator if multiple values accepted
+    sep: Optional[str] # Separator if multiple values accepted
     predicate: str # RDF predicate
-    vtype: Union[type, str, Relation] # Literal, external URI or internal relation
+    vtype: type | str | Relation # Literal, external URI or internal relation
 
-AttributeMap = Dict[str, Union[Attribute, bool]]
-EntityMap = Dict[str, Union[str, AttributeMap]]
+class EntityMap(TypedDict):
+    entity: str
+    attributes: Dict[str, Attribute]
+    sort_by: str
+    key: Optional[Callable[[pd.Series], pd.Series]]
+
+AttributeMap = Dict[str, bool]
 
 # Custom namespaces
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')

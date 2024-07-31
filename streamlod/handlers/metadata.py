@@ -1,4 +1,4 @@
-from typing import Union, List, Set, Generator, Optional, Any, Iterable
+from typing import Union, List, Set, Generator, Optional, Any, Iterable, TYPE_CHECKING
 import pandas as pd
 import numpy as np
 from rdflib import Graph
@@ -10,8 +10,11 @@ from io import StringIO
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
 import streamlod.entities as entities
-from streamlod.entities.mappings import IDE, BASE, NS, Relation, MapMeta
+from streamlod.entities.mappings import IDE, BASE, NS, Relation, MapMeta, Some
 from streamlod.utils import id_join, key
+
+if TYPE_CHECKING:
+    from pandas._libs.missing import NAType
 
 
 class MetadataUploadHandler(UploadHandler):
@@ -37,14 +40,14 @@ class MetadataUploadHandler(UploadHandler):
             print(e)
             return False
 
-    def _check_class(self, string: str) -> str:
+    def _check_class(self, string: str) -> Union[str, 'NAType']:
         string = ''.join(word.capitalize() for word in string.split())
         if hasattr(entities, string):
             return string
         else:
             return pd.NA
 
-    def _validateIDE(self, df: pd.DataFrame, entity_name: str) -> pd.DataFrame:
+    def _validateIDE(self, df: pd.DataFrame, entityName: str) -> pd.DataFrame:
         for col in df: 
             df[col] = df[col].str.strip()
 
@@ -54,18 +57,18 @@ class MetadataUploadHandler(UploadHandler):
         else:
             df.dropna(subset='identifier', inplace=True)
 
-        df.index = df.identifier.map(lambda identifier: f'loc:{entity_name}-{quote_plus(identifier)}')
+        df.index = df.identifier.map(lambda identifier: f'loc:{entityName}-{quote_plus(identifier)}')
 
         return df
 
-    def toRDF(self, df: pd.DataFrame, entity_name: str = BASE) -> Generator[str, None, None]:
+    def toRDF(self, df: pd.DataFrame, entityName: str = BASE) -> Generator[str, None, None]:
         try:
-            entity_map = IDE[entity_name]
-            entity, attrs = entity_map['entity'], entity_map['attributes']
+            entityMap = IDE[entityName]
+            entity, attrs = entityMap['entity'], entityMap['attributes']
         except KeyError as e:
-            raise ValueError(f"Entity '{entity_name}' is not defined in the identifiable entities mapping.") from e
+            raise ValueError(f"Entity '{entityName}' is not defined in the identifiable entities mapping.") from e
 
-        df = self._validateIDE(df, entity_name)
+        df = self._validateIDE(df, entityName)
 
         if 'class' in attrs:
             class_ns = attrs['class'].vtype # Class namespace
@@ -89,12 +92,12 @@ class MetadataUploadHandler(UploadHandler):
 
             elif isinstance((rel := attr.vtype), Relation): # Related entity
                 df2 = col.str.extract(rel.pattern).dropna(subset=['identifier'])
-                entity_name2 = rel.name
+                entityName2 = rel.name
 
                 for s, id2 in zip(df2.index, df2.identifier.to_list()):
-                    yield f'{s} {p} loc:{entity_name2}-{quote_plus(id2)} .'
+                    yield f'{s} {p} loc:{entityName2}-{quote_plus(id2)} .'
 
-                yield from self.toRDF(df2, entity_name2)
+                yield from self.toRDF(df2, entityName2)
 
             else:
                 for s, o in zip(col.index, col.to_list()):
@@ -113,7 +116,7 @@ class MetadataUploadHandler(UploadHandler):
             df = pd.read_csv(
                 path,
                 header=0,
-                names=IDE[BASE]['attributes'],
+                names=list(IDE[BASE]['attributes']),
                 dtype='string',
                 on_bad_lines='skip',
                 engine='c',
@@ -184,20 +187,20 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
 
         return True
 
-    def _filter_map(self, entity_name: str, by: Union[str, tuple[str, ...]]) -> str:
-        attrs = IDE[entity_name]['attributes']
+    def _filter_map(self, entityName: str, by: Union[str, tuple[str, ...]]) -> str:
+        attrs = IDE[entityName]['attributes']
 
         if isinstance(by, tuple): # Relation
             if len(by) == 3: # Inverse relation
-                entity_name2, name2, name = by
-                attrs2 = IDE[entity_name2]['attributes']
+                entityName2, name2, name = by
+                attrs2 = IDE[entityName2]['attributes']
                 predicate2 = '^' + attrs2[name2].predicate
                 predicate = attrs2[name].predicate
             else:
                 name2, name = by
                 attr2 = attrs[name2]
-                predicate2, entity_name2 = attr2.predicate, attr2.vtype.name
-                predicate = IDE[entity_name2]['attributes'][name].predicate
+                predicate2, entityName2 = attr2.predicate, attr2.vtype.name
+                predicate = IDE[entityName2]['attributes'][name].predicate
 
             return f'?s {predicate2} / {predicate} ?x .'
         else:
@@ -205,7 +208,8 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
             return f'?s {predicate} ?x .'
 
     def _query(self, query: str) -> pd.DataFrame:
-        wrapper = self.sparql
+        if not (wrapper := self.sparql):
+            raise Exception
         wrapper.setQuery(query)
         result = wrapper.queryAndConvert()
         _csv = StringIO(result.decode('utf-8'))
@@ -213,7 +217,7 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
 
     def getEntities(
         self,
-        entity_name: str = BASE,
+        entityName: str = BASE,
         select_only: Optional[str] = None,
         by: Optional[Union[str, tuple[str, ...]]] = None,
         value: Any = None
@@ -223,7 +227,7 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
 WHERE {{
         {}
 }} """
-        query_map = self.query_dict[entity_name]
+        query_map = self.query_dict[entityName]
         select, where = list(query_map[0]), list(query_map[1])
 
         if select_only:
@@ -232,8 +236,8 @@ WHERE {{
 
         if by and value:
             value_clause = '\n        VALUES ?x {{ {} }}'
-            filter_condition = self._filter_map(entity_name, by)
-            where.append(filter_condition)
+            condition = self._filter_map(entityName, by)
+            where.append(condition)
             where.append(value_clause.format(id_join(value)))
 
         query = self.prefixes + select_clause.format(' '.join(select)) + where_clause.format('\n        '.join(where))
@@ -242,13 +246,13 @@ WHERE {{
         if select_only:
             return df.iloc[:, 0].to_numpy()
 
-        for col, uri in self.uri_strip[entity_name]:
+        for col, uri in self.uri_strip[entityName]:
             df[col] = df[col].str.replace(uri, '')
 
-        cols_to_sort, sort_key = self.sort_by[entity_name]
+        cols_to_sort, sort_key = self.sort_by[entityName]
         return df.sort_values(by=cols_to_sort, key=sort_key, ignore_index=True)
 
-    def getById(self, identifier: str) -> pd.DataFrame:
+    def getById(self, identifier: Some[str]) -> pd.DataFrame:
         df = self.getEntities(by='identifier', value=identifier)
         if df.empty:
             df = self.getEntities('Person', by='identifier', value=identifier)
@@ -260,8 +264,8 @@ WHERE {{
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
         return self.getEntities()
 
-    def getAuthorsOfCulturalHeritageObject(self, objectId: Union[str, List[str]]) -> pd.DataFrame:
+    def getAuthorsOfCulturalHeritageObject(self, objectId: Some[str]) -> pd.DataFrame:
         return self.getEntities('Person', by=('CHO', 'hasAuthor', 'identifier'), value=objectId)
 
-    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> pd.DataFrame:
+    def getCulturalHeritageObjectsAuthoredBy(self, personId: Some[str]) -> pd.DataFrame:
         return self.getEntities(by=('hasAuthor', 'identifier'), value=personId)

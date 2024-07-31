@@ -143,7 +143,7 @@ class ProcessDataQueryHandler(QueryHandler):
         self,
         activity_list: Iterable[str] = ACTIVITIES.keys(),
         attribute: str = 'refersTo',
-        filter_condition: str = ''
+        condition: str = ''
     ) -> List[Any]:
         """
         Performs a unified query to retrieve the values of a column in all activity tables for the rows that match the condition.
@@ -162,7 +162,7 @@ class ProcessDataQueryHandler(QueryHandler):
                     sql = f"""
                         SELECT {attribute}
                         FROM {name}
-                        {filter_condition}"""
+                        {condition}"""
                     subqueries.append(sql)
 
             if not subqueries:
@@ -183,7 +183,7 @@ class ProcessDataQueryHandler(QueryHandler):
     def getActivities(
         self,
         activity_list: Iterable[str] = ACTIVITIES.keys(),
-        filter_condition: str = ''
+        condition: str = ''
     ) -> pd.DataFrame:
         """
         Retrieves data from multiple activity tables, linking each activity to its associated tools,
@@ -203,7 +203,7 @@ class ProcessDataQueryHandler(QueryHandler):
                 FROM {name} AS A
                 JOIN Tool AS T
                 ON A.internalId = T.internalId
-                {filter_condition}
+                {condition}
                 GROUP BY {cols};
                 """
             try:
@@ -231,25 +231,25 @@ class ProcessDataQueryHandler(QueryHandler):
     def getById(self, identifier: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string
         identifier = id_join(identifier, ', ')
-        return self.getActivities(filter_condition=f'WHERE A.refersTo IN ({identifier})')
+        return self.getActivities(condition=f'WHERE A.refersTo IN ({identifier})')
 
     def getAllActivities(self) -> pd.DataFrame:
         return self.getActivities()
 
     def getActivitiesByResponsibleInstitution(self, partialName: str) -> pd.DataFrame:
-        return self.getActivities(filter_condition=f"WHERE A.institute LIKE '%{partialName}%'")
+        return self.getActivities(condition=f"WHERE A.institute LIKE '%{partialName}%'")
 
     def getActivitiesByResponsiblePerson(self, partialName: str) -> pd.DataFrame:
-        return self.getActivities(filter_condition=f"WHERE A.person LIKE '%{partialName}%'")
+        return self.getActivities(condition=f"WHERE A.person LIKE '%{partialName}%'")
 
     def getActivitiesUsingTool(self, partialName: str) -> pd.DataFrame:
-        return self.getActivities(filter_condition=f"WHERE T.tool LIKE '%{partialName}%'")
+        return self.getActivities(condition=f"WHERE T.tool LIKE '%{partialName}%'")
 
     def getActivitiesStartedAfter(self, date: str) -> pd.DataFrame:
-        return self.getActivities(filter_condition=f"WHERE A.start >= '{date}'")
+        return self.getActivities(condition=f"WHERE A.start >= '{date}'")
 
     def getActivitiesEndedBefore(self, date: str) -> pd.DataFrame:
-        return self.getActivities(filter_condition=f"WHERE A.end <= '{date}'")
+        return self.getActivities(condition=f"WHERE A.end <= '{date}'")
 
     def getAcquisitionsByTechnique(self, partialName: str) -> pd.DataFrame:
-        return self.getActivities(['Acquisition'], filter_condition=f"WHERE A.technique LIKE '%{partialName}%'")
+        return self.getActivities(['Acquisition'], condition=f"WHERE A.technique LIKE '%{partialName}%'")
