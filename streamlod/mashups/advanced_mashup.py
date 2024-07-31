@@ -26,7 +26,7 @@ class AdvancedMashup(BasicMashup):
             ids = handler.getAttribute(filter_condition=f"WHERE person LIKE '%{partialName}%'")
             object_ids.update(ids)
         
-        return self.getCulturalHeritageObjectsByIds(object_ids)[0]
+        return self.getCulturalHeritageObjectsByIds(object_ids)
 
     def getObjectsHandledByResponsibleInstitution(self, partialName: str) -> List[CulturalHeritageObject]:
         object_ids = set()
@@ -35,7 +35,7 @@ class AdvancedMashup(BasicMashup):
             ids = handler.getAttribute(filter_condition=f"WHERE institute LIKE '%{partialName}%'")
             object_ids.update(ids)
 
-        return self.getCulturalHeritageObjectsByIds(object_ids)[0]
+        return self.getCulturalHeritageObjectsByIds(object_ids)
     
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> List[Person]:
         object_ids = set()

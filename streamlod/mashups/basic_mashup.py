@@ -159,7 +159,8 @@ class BasicMashup:
             return []
 
         result: List[Activity] = []
-        objects, missing_ids = self.getCulturalHeritageObjectsByIds(df.index)
+        objects = self.getCulturalHeritageObjectsByIds(df.index)
+        object_ids = set(obj.identifier for obj in objects)
 
         # Map activity names to their corresponding classes and attribute counts
         row_map = [
@@ -168,7 +169,7 @@ class BasicMashup:
         ]
 
         # Iterate through the DataFrame rows, creating Activity instances and linking them with cultural heritage objects
-        array = df[~df.index.isin(missing_ids)].to_numpy(dtype=object, na_value=None)
+        array = df[df.index.isin(object_ids)].to_numpy(dtype=object, na_value=None)
         for obj, row in zip(objects, array):
             index = 0
             for activity_class, step in row_map:
@@ -200,23 +201,12 @@ class BasicMashup:
 
         return result[0] if result else None # Check result again as constructors might return an empty list for invalid data
 
-    def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> tuple[List[CulturalHeritageObject], Set[str]]:
+    def getCulturalHeritageObjectsByIds(self, identifiers: Iterable[str]) -> List[CulturalHeritageObject]:
         """
         Retrieves cultural heritage objects by their identifiers from multiple metadata handlers.
-
-        In addition to the object list, the set of identifiers that were not found is also returned
-        for alignment purposes during the construction of Activity objects.
         """
-        dfs = []
-        identifiers, missing_ids = set(identifiers), set(identifiers)
-        for handler in self.metadataQuery:
-            df = handler.getEntities(by='identifier', value=identifiers)
-            if df.empty:
-                continue
-            missing_ids -= set(df['identifier'])
-            dfs.append(df)
-
-        return self.toCHO(dfs), missing_ids
+        dfs = [handler.getEntities(by='identifier', value=set(identifiers)) for handler in self.metadataQuery]
+        return self.toCHO(dfs)
 
     def getAllPeople(self) -> List[Person]:
         dfs = [handler.getAllPeople() for handler in self.metadataQuery]

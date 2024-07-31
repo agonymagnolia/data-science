@@ -19,7 +19,7 @@ EntityMap = Dict[str, Union[str, AttributeMap]]
 
 # Custom namespaces
 EDM = Namespace('http://www.europeana.eu/schemas/edm/')
-LOC = Namespace('https://agonymagnolia.github.io/data-science#') # This is the local namespace
+LOC = Namespace('https://agonymagnolia.github.io/data-science/') # This is the local namespace
 
 # Custom namespace prefixes
 NS = {'edm': EDM, 'loc': LOC}
