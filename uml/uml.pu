@@ -1,66 +1,122 @@
 @startuml
-class Handler {
-    + dbPathOrUrl: str
-    + getDbPathOrUrl() : str
-    + setDbPathOrUrl(newDbPathOrUrl: str) : bool
-}
-
-class UploadHandler {
-    + pushDataToDb(path: str)
-}
-
-class QueryHandler {
-    + getDbPathOrUrl() : str
-    + getById(id: str)
-}
-
-Handler <|-- UploadHandler
-Handler <|-- QueryHandler
-
-class MetadataUploadHandler {
-    + <b>store: SPARQLUpdateStore [0..1]</b>
-    + setDbPathOrUrl(newDbPathOrUrl: str, <b>reset: bool = False</b>) : bool
-    - <b>checkClass(string: str) : Maybe[str]</b>
-    - <b>validateIDE(df: DataFrame, entityName: str) : DataFrame</b>
-    + <b>toRDF(df: DataFrame, entityName: str = BASE) : Generator[str, None, None]</b>
-    + pushDataToDb(path: str) : bool
-    + <b>clearDb() : bool</b>
-}
-
-UploadHandler <|-- MetadataUploadHandler
-
-class MetadataQueryHandler {
-    + setDbPathOrUrl(newDbPathOrUrl: str) : bool
-    + <b>getEntities(entityName: str, by: str | tuple[str, ...], value: Some[str]) : DataFrame</b>
-    + getById(identifier: <b>Some[str]</b>) : DataFrame
-    + getAllPeople() : DataFrame
-    + getAllCulturalHeritageObjects() : DataFrame
-    + getAuthorsOfCulturalHeritageObject(objectId: <b>Some[str]</b>) : DataFrame
-    + getCulturalHeritageObjectsAuthoredBy(personId: <b>Some[str]</b>) : DataFrame
-}
+skinparam groupInheritance 4
 
 metaclass MapMeta {
-    
+    - <b>query_dict : dict[str, tuple[list[str], list[str]]]</b>
+    - <b>prefixes : str</b>
+    - <b>sort_by : dict[str, list[str]]</b>
+    - <b>uri_strip : dict[str, list[tuple[str, str]]]</b>
 }
 
-QueryHandler <|-- MetadataQueryHandler
-MetadataQueryHandler -|> MapMeta
+package entities {
+    class IdentifiableEntity {
+      identifier : str [1]
+      getId() : str
+    }
 
-class ProcessDataUploadHandler {
-    + setDbPathOrUrl(newDbPathOrUrl: str, <b>reset: bool = False</b>) : bool
-    + pushDataToDb(path: str) : bool
-    + <b>clearDb() : bool</b>
+    class Person extends IdentifiableEntity {
+      name : str [1]
+      getName() : str
+    }
+
+    class CulturalHeritageObject extends IdentifiableEntity {
+      title : str [1]
+      date : str [0..1]
+      owner : str [1]
+      place : str [1]
+      getTitle() : str
+      getDate() : str | None
+      getOwner() : str
+      getPlace() : str
+      getAuthors() : list[Person]
+    }
+
+    CulturalHeritageObject <|-- NauticalChart
+    CulturalHeritageObject <|-- ManuscriptPlate
+    CulturalHeritageObject <|-- ManuscriptVolume
+    CulturalHeritageObject <|-- PrintedVolume
+    CulturalHeritageObject <|-- PrintedMaterial
+    CulturalHeritageObject <|-- Herbarium
+    CulturalHeritageObject <|-- Specimen
+    CulturalHeritageObject <|-- Painting
+    CulturalHeritageObject <|-- Model
+    CulturalHeritageObject <|-- Map
+
+class Activity {
+  institute : str [1]
+  person : str [0..1]
+  tool : str [0..*]
+  start : str [0..1]
+  end : str [0..1]
+  getResponsibleInstitute() : str
+  getResponsiblePerson() : str | None
+  getStartDate() : str | None
+  getEndDate() : str | None
 }
 
-UploadHandler <|-- ProcessDataUploadHandler
-
-class ProcessDataQueryHandler {
-    + getAttribute(activityList: list[str], attribute: str, condition: str) : list[str]
-    + getActivities(activityList: list[str], condition: str) : DataFrame
-    + getById(identifier: Some[str]) : DataFrame
-    + getAllActivities() : DataFrame
+class Acquisition extends Activity {
+  technique : str
+  getTechnique() : str
 }
 
-QueryHandler <|-- ProcessDataQueryHandler
+Activity <|-- Processing
+Activity <|-- Modelling
+Activity <|-- Optimising
+Activity <|-- Exporting
 
+}
+
+package handlers {
+    class Handler {
+        - dbPathOrUrl : str
+        + getDbPathOrUrl() : str
+        + setDbPathOrUrl(newDbPathOrUrl : str) : bool
+    }
+
+    class UploadHandler extends Handler {
+        + pushDataToDb(path : str)
+    }
+
+    class QueryHandler extends Handler {
+        + getDbPathOrUrl() : str
+        + getById(id : str)
+    }
+
+    class MetadataUploadHandler extends UploadHandler {
+        - <b>store : SPARQLUpdateStore [0..1]</b>
+        + setDbPathOrUrl(newDbPathOrUrl : str, <b>reset : bool = False</b>) : bool
+        - <b>checkClass(string : str) : str | NA </b>
+        - <b>validateIDE(df : DataFrame, entityName : str) : DataFrame</b>
+        - <b>toRDF(df : DataFrame, entityName : str = BASE) : Generator[str, None, None]</b>
+        + pushDataToDb(path : str) : bool
+        + <b>clearDb() : bool</b>
+    }
+
+    class MetadataQueryHandler extends QueryHandler {
+        - <b>sparql: SPARQLWrapper [0..1]</b>
+        + setDbPathOrUrl(newDbPathOrUrl : str) : bool
+        + <b>getEntities(select : str, where : str | tuple[str, ...], value : str) : DataFrame</b>
+        + getById(identifier : str) : DataFrame
+        + getAllPeople() : DataFrame
+        + getAllCulturalHeritageObjects() : DataFrame
+        + getAuthorsOfCulturalHeritageObject(objectId : str) : DataFrame
+        + getCulturalHeritageObjectsAuthoredBy(personId : str) : DataFrame
+    }
+
+    MetadataQueryHandler ..|> MapMeta
+
+    class ProcessDataUploadHandler extends UploadHandler {
+        - <b>json_map(name : str) : dict[str, str]</b>
+        + setDbPathOrUrl(newDbPathOrUrl : str, <b>reset : bool = False</b>) : bool
+        + pushDataToDb(path : str) : bool
+        + <b>clearDb() : bool</b>
+    }
+
+    class ProcessDataQueryHandler extends QueryHandler {
+        + <b>getAttribute(from : list[str], select : str, where : str) : list[str]</b>
+        + <b>getActivities(from : list[str], where : str) : DataFrame</b>
+        + getById(identifier : str) : DataFrame
+        + getAllActivities() : DataFrame
+    }
+}
 @enduml

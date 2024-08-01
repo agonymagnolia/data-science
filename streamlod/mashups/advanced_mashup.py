@@ -23,7 +23,7 @@ class AdvancedMashup(BasicMashup):
         object_ids = set()
 
         for handler in self.processQuery:
-            ids = handler.getAttribute(filter_condition=f"WHERE person LIKE '%{partialName}%'")
+            ids = handler.getAttribute(condition=f"WHERE person LIKE '%{partialName}%'")
             object_ids.update(ids)
         
         return self.getCulturalHeritageObjectsByIds(object_ids)
@@ -32,7 +32,7 @@ class AdvancedMashup(BasicMashup):
         object_ids = set()
 
         for handler in self.processQuery:
-            ids = handler.getAttribute(filter_condition=f"WHERE institute LIKE '%{partialName}%'")
+            ids = handler.getAttribute(condition=f"WHERE institute LIKE '%{partialName}%'")
             object_ids.update(ids)
 
         return self.getCulturalHeritageObjectsByIds(object_ids)
@@ -43,7 +43,7 @@ class AdvancedMashup(BasicMashup):
         for handler in self.processQuery:
             ids = handler.getAttribute(
                 activity_list=['Acquisition'],
-                filter_condition=f"WHERE start >= '{start}' AND end <= '{end}'"
+                condition=f"WHERE start >= '{start}' AND end <= '{end}'"
             )
             object_ids.update(ids)
 

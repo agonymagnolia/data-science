@@ -1,0 +1,70 @@
+@startuml packages
+set namespaceSeparator none
+package "streamlod" as streamlod #aliceblue {
+}
+package "streamlod.entities" as streamlod.entities #antiquewhite {
+}
+package "streamlod.entities.activity" as streamlod.entities.activity #antiquewhite {
+}
+package "streamlod.entities.identifiable_entity" as streamlod.entities.identifiable_entity #antiquewhite {
+}
+package "streamlod.entities.mappings" as streamlod.entities.mappings #antiquewhite {
+}
+package "streamlod.handlers" as streamlod.handlers #aquamarine {
+}
+package "streamlod.handlers.base" as streamlod.handlers.base #aquamarine {
+}
+package "streamlod.handlers.metadata" as streamlod.handlers.metadata #aquamarine {
+}
+package "streamlod.handlers.process" as streamlod.handlers.process #aquamarine {
+}
+package "streamlod.interface" as streamlod.interface #burlywood {
+}
+package "streamlod.interface.print" as streamlod.interface.print #burlywood {
+}
+package "streamlod.mashups" as streamlod.mashups #cadetblue {
+}
+package "streamlod.mashups.advanced_mashup" as streamlod.mashups.advanced_mashup #cadetblue {
+}
+package "streamlod.mashups.basic_mashup" as streamlod.mashups.basic_mashup #cadetblue {
+}
+package "streamlod.tests" as streamlod.tests #chartreuse {
+}
+package "streamlod.tests.test" as streamlod.tests.test #chartreuse {
+}
+package "streamlod.tests.test_incomplete_data" as streamlod.tests.test_incomplete_data #chartreuse {
+}
+package "streamlod.utils" as streamlod.utils #aliceblue {
+}
+streamlod --> streamlod.handlers
+streamlod --> streamlod.mashups
+streamlod.entities --> streamlod.entities.activity
+streamlod.entities --> streamlod.entities.identifiable_entity
+streamlod.entities.activity --> streamlod.entities.identifiable_entity
+streamlod.entities.activity --> streamlod.utils
+streamlod.entities.identifiable_entity --> streamlod.utils
+streamlod.entities.mappings --> streamlod.utils
+streamlod.handlers --> streamlod.handlers.metadata
+streamlod.handlers --> streamlod.handlers.process
+streamlod.handlers.metadata --> streamlod.entities.mappings
+streamlod.handlers.metadata --> streamlod.handlers.base
+streamlod.handlers.metadata --> streamlod.utils
+streamlod.handlers.process --> streamlod.entities.mappings
+streamlod.handlers.process --> streamlod.handlers.base
+streamlod.handlers.process --> streamlod.utils
+streamlod.interface --> streamlod.interface.print
+streamlod.mashups --> streamlod.mashups.advanced_mashup
+streamlod.mashups --> streamlod.mashups.basic_mashup
+streamlod.mashups.advanced_mashup --> streamlod.entities
+streamlod.mashups.advanced_mashup --> streamlod.mashups.basic_mashup
+streamlod.mashups.basic_mashup --> streamlod.entities
+streamlod.mashups.basic_mashup --> streamlod.entities.mappings
+streamlod.mashups.basic_mashup --> streamlod.handlers
+streamlod.mashups.basic_mashup --> streamlod.utils
+streamlod.tests.test --> streamlod.entities
+streamlod.tests.test --> streamlod.handlers
+streamlod.tests.test --> streamlod.mashups
+streamlod.tests.test_incomplete_data --> streamlod.entities
+streamlod.tests.test_incomplete_data --> streamlod.handlers
+streamlod.tests.test_incomplete_data --> streamlod.mashups
+@enduml

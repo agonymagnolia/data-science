@@ -1,0 +1,223 @@
+@startuml classes
+set namespaceSeparator none
+class "Acquisition" as streamlod.entities.activity.Acquisition #antiquewhite {
+  technique : str
+  getTechnique() -> str
+}
+class "Activity" as streamlod.entities.activity.Activity #antiquewhite {
+  _refersTo
+  end : Optional[str]
+  institute : str
+  person : Optional[str]
+  refersTo
+  start : Optional[str]
+  tool : set, NoneType
+  getEndDate() -> Union[str, None]
+  getResponsibleInstitute() -> str
+  getResponsiblePerson() -> Union[str, None]
+  getStartDate() -> Union[str, None]
+  getTools() -> Set[str]
+}
+class "AdvancedMashup" as streamlod.mashups.advanced_mashup.AdvancedMashup #cadetblue {
+  getActivitiesOnObjectsAuthoredBy(personId: str) -> List[Activity]
+  getAuthorsOfObjectsAcquiredInTimeFrame(start: str, end: str) -> List[Person]
+  getObjectsHandledByResponsibleInstitution(partialName: str) -> List[CulturalHeritageObject]
+  getObjectsHandledByResponsiblePerson(partialName: str) -> List[CulturalHeritageObject]
+}
+class "Attribute" as streamlod.entities.mappings.Attribute #antiquewhite {
+  order : int
+  predicate : str
+  required : bool
+  sep : Optional[str]
+  vtype
+}
+class "BasicMashup" as streamlod.mashups.basic_mashup.BasicMashup #cadetblue {
+  metadataQuery : list
+  processQuery : list
+  _integrate(dfs: List[pd.DataFrame], entity_name: str) -> 
+  _normalize(dfs: Union[pd.DataFrame, List[pd.DataFrame]], entity_name: str) -> 
+  _selective_bfill(group, activity_names: List[str]) -> 
+  _validate(df, entity_name: str) -> 
+  addMetadataHandler(handler: MetadataQueryHandler) -> bool
+  addProcessHandler(handler: ProcessDataQueryHandler) -> bool
+  cleanMetadataHandlers() -> bool
+  cleanProcessHandlers() -> bool
+  getAcquisitionsByTechnique(partialName: str) -> List[Activity]
+  getActivitiesByResponsibleInstitution(partialName: str) -> List[Activity]
+  getActivitiesByResponsiblePerson(partialName: str) -> List[Activity]
+  getActivitiesEndedBefore(date: str) -> List[Activity]
+  getActivitiesStartedAfter(date: str) -> List[Activity]
+  getActivitiesUsingTool(partialName: str) -> List[Activity]
+  getAllActivities() -> List[Activity]
+  getAllCulturalHeritageObjects() -> List[CulturalHeritageObject]
+  getAllPeople() -> List[Person]
+  getAuthorsOfCulturalHeritageObject(objectId: str) -> List[Person]
+  getCulturalHeritageObjectsAuthoredBy(personId: str) -> List[CulturalHeritageObject]
+  getCulturalHeritageObjectsByIds(identifiers: Iterable[str]) -> List[CulturalHeritageObject]
+  getEntityById(identifier: str) -> Union[IdentifiableEntity, None]
+  toActivity(dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Activity]
+  toCHO(dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[CulturalHeritageObject]
+  toPerson(dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Person]
+}
+class "CulturalHeritageObject" as streamlod.entities.identifiable_entity.CulturalHeritageObject #antiquewhite {
+  date : Optional[str]
+  hasAuthor : NoneType, list
+  owner : str
+  place : str
+  title : str
+  getAuthors() -> List[Person]
+  getDate() -> Union[str, None]
+  getOwner() -> str
+  getPlace() -> str
+  getTitle() -> str
+}
+class "EntityMap" as streamlod.entities.mappings.EntityMap #antiquewhite {
+  attributes : Dict[str, Attribute]
+  entity : str
+  key : Optional[Callable[[pd.Series], pd.Series]]
+  sort_by : str
+}
+class "Exporting" as streamlod.entities.activity.Exporting #antiquewhite {
+}
+class "Handler" as streamlod.handlers.base.Handler #aquamarine {
+  dbPathOrUrl : str
+  getDbPathOrUrl() -> str
+  setDbPathOrUrl(pathOrUrl: str) -> bool
+}
+class "Herbarium" as streamlod.entities.identifiable_entity.Herbarium #antiquewhite {
+}
+class "IdentifiableEntity" as streamlod.entities.identifiable_entity.IdentifiableEntity #antiquewhite {
+  identifier : str
+  getId() -> str
+}
+class "ManuscriptPlate" as streamlod.entities.identifiable_entity.ManuscriptPlate #antiquewhite {
+}
+class "ManuscriptVolume" as streamlod.entities.identifiable_entity.ManuscriptVolume #antiquewhite {
+}
+class "Map" as streamlod.entities.identifiable_entity.Map #antiquewhite {
+}
+class "MapMeta" as streamlod.entities.mappings.MapMeta #antiquewhite {
+  _query_map(cls: str, entity_name) -> tuple[List[str], List[str]]
+  _sort_map(cls: str, entity_name)
+  _uri_map(cls: str, entity_name) -> List[tuple[str, str]]
+}
+class "MetadataQueryHandler" as streamlod.handlers.metadata.MetadataQueryHandler #aquamarine {
+  sparql : SPARQLWrapper, Optional[SPARQLWrapper]
+  _filter_map(entityName: str, by: Union[str, tuple[str, ...]]) -> str
+  _query(query: str) -> 
+  getAllCulturalHeritageObjects() -> 
+  getAllPeople() -> 
+  getAuthorsOfCulturalHeritageObject(objectId: Some[str]) -> 
+  getById(identifier: Some[str]) -> 
+  getCulturalHeritageObjectsAuthoredBy(personId: Some[str]) -> 
+  getEntities(entityName: str, select_only: Optional[str], by: Optional[Union[str, tuple[str, ...]]], value: Any) -> Union[pd.DataFrame, np.ndarray[Any]]
+  setDbPathOrUrl(newDbPathOrUrl: str) -> bool
+}
+class "MetadataUploadHandler" as streamlod.handlers.metadata.MetadataUploadHandler #aquamarine {
+  store : SPARQLUpdateStore
+  _check_class(string: str) -> Union[str, 'NAType']
+  _validateIDE(df, entityName: str) -> 
+  clearDb() -> bool
+  pushDataToDb(path: str) -> bool
+  setDbPathOrUrl(newDbPathOrUrl: str) -> bool
+  toRDF(df, entityName: str) -> Generator[str, None, None]
+}
+class "Model" as streamlod.entities.identifiable_entity.Model #antiquewhite {
+}
+class "Modelling" as streamlod.entities.activity.Modelling #antiquewhite {
+}
+class "NauticalChart" as streamlod.entities.identifiable_entity.NauticalChart #antiquewhite {
+}
+class "Optimising" as streamlod.entities.activity.Optimising #antiquewhite {
+}
+class "Painting" as streamlod.entities.identifiable_entity.Painting #antiquewhite {
+}
+class "Person" as streamlod.entities.identifiable_entity.Person #antiquewhite {
+  name : str
+  getName() -> str
+}
+class "PrintedMaterial" as streamlod.entities.identifiable_entity.PrintedMaterial #antiquewhite {
+}
+class "PrintedVolume" as streamlod.entities.identifiable_entity.PrintedVolume #antiquewhite {
+}
+class "ProcessDataQueryHandler" as streamlod.handlers.process.ProcessDataQueryHandler #aquamarine {
+  getAcquisitionsByTechnique(partialName: str) -> 
+  getActivities(activity_list: Iterable[str], condition: str) -> 
+  getActivitiesByResponsibleInstitution(partialName: str) -> 
+  getActivitiesByResponsiblePerson(partialName: str) -> 
+  getActivitiesEndedBefore(date: str) -> 
+  getActivitiesStartedAfter(date: str) -> 
+  getActivitiesUsingTool(partialName: str) -> 
+  getAllActivities() -> 
+  getAttribute(activity_list: Iterable[str], attribute: str, condition: str) -> List[Any]
+  getById(identifier: Union[str, List[str]]) -> 
+}
+class "ProcessDataUploadHandler" as streamlod.handlers.process.ProcessDataUploadHandler #aquamarine {
+  identifiers : set, Set[str]
+  _json_map(activity: str) -> Dict[str, str]
+  clearDb() -> bool
+  pushDataToDb(path: str) -> bool
+  setDbPathOrUrl(newDbPathOrUrl: str) -> bool
+}
+class "Processing" as streamlod.entities.activity.Processing #antiquewhite {
+}
+class "QueryHandler" as streamlod.handlers.base.QueryHandler #aquamarine {
+  getById(id: str)
+  getDbPathOrUrl() -> str
+}
+class "Relation" as streamlod.entities.mappings.Relation #antiquewhite {
+  name : str
+  pattern : str
+}
+class "Specimen" as streamlod.entities.identifiable_entity.Specimen #antiquewhite {
+}
+class "TestIncompleteData" as streamlod.tests.test_incomplete_data.TestIncompleteData #chartreuse {
+  setUpClass(cls)
+  test_01_metadata_completeness()
+  test_02_metadata_integration()
+  test_03_author_correctness()
+  test_04_process_completeness()
+  test_05_process_integration()
+  test_06_refersTo_correctness()
+  test_07_process_order()
+}
+class "TestProjectBasic" as streamlod.tests.test.TestProjectBasic #chartreuse {
+  graph : str
+  metadata : str
+  process : str
+  relational : str
+  test_01_MetadataUploadHandler()
+  test_02_ProcessDataUploadHandler()
+  test_03_MetadataQueryHandler()
+  test_04_ProcessDataQueryHandler()
+  test_05_AdvancedMashup()
+}
+class "UploadHandler" as streamlod.handlers.base.UploadHandler #aquamarine {
+  pushDataToDb(path: str)
+}
+streamlod.entities.activity.Acquisition --|> streamlod.entities.activity.Activity
+streamlod.entities.activity.Exporting --|> streamlod.entities.activity.Activity
+streamlod.entities.activity.Modelling --|> streamlod.entities.activity.Activity
+streamlod.entities.activity.Optimising --|> streamlod.entities.activity.Activity
+streamlod.entities.activity.Processing --|> streamlod.entities.activity.Activity
+streamlod.entities.identifiable_entity.CulturalHeritageObject --|> streamlod.entities.identifiable_entity.IdentifiableEntity
+streamlod.entities.identifiable_entity.Herbarium --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.ManuscriptPlate --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.ManuscriptVolume --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.Map --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.Model --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.NauticalChart --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.Painting --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.Person --|> streamlod.entities.identifiable_entity.IdentifiableEntity
+streamlod.entities.identifiable_entity.PrintedMaterial --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.PrintedVolume --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.entities.identifiable_entity.Specimen --|> streamlod.entities.identifiable_entity.CulturalHeritageObject
+streamlod.handlers.base.QueryHandler --|> streamlod.handlers.base.Handler
+streamlod.handlers.base.UploadHandler --|> streamlod.handlers.base.Handler
+streamlod.handlers.metadata.MetadataQueryHandler --|> streamlod.handlers.base.QueryHandler
+streamlod.handlers.metadata.MetadataUploadHandler --|> streamlod.handlers.base.UploadHandler
+streamlod.handlers.process.ProcessDataQueryHandler --|> streamlod.handlers.base.QueryHandler
+streamlod.handlers.process.ProcessDataUploadHandler --|> streamlod.handlers.base.UploadHandler
+streamlod.mashups.advanced_mashup.AdvancedMashup --|> streamlod.mashups.basic_mashup.BasicMashup
+streamlod.entities.identifiable_entity.CulturalHeritageObject --* streamlod.entities.activity.Activity : _refersTo
+@enduml
