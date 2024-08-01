@@ -76,11 +76,11 @@ ACTIVITY_ATTRIBUTES: AttributeMap = {
 ACQUISITION_ATTRIBUTES: AttributeMap = {
     'refersTo': True,
     'institute': True,
-    'technique': True,
     'person': False,
     'start': False,
     'end': False,
-    'tool': False
+    'tool': False,
+    'technique': True,
 }
 
 ACTIVITIES: Dict[str, AttributeMap] = {

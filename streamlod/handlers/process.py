@@ -225,7 +225,7 @@ class ProcessDataQueryHandler(QueryHandler):
             return pd.DataFrame()
 
         # Concatenate activity DataFrames sorting alphanumerically the index
-        return pd.concat(activities.values(), axis=1, join='outer', keys=activities.keys()) \
+        return pd.concat(activities.values(), axis=0, join='outer', keys=activities.keys()) \
                  .sort_index(key=lambda x: x.map(key))
 
     def getById(self, identifier: Union[str, List[str]]) -> pd.DataFrame:

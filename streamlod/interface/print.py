@@ -84,7 +84,7 @@ def stack_print(df: pd.DataFrame) -> None:
         print('')
         return None
 
-    df = df.stack(level=0, future_stack=True)
+    #df = df.stack(level=0, future_stack=True)
 
     indexw = max_length(df.index)
     colsw = [indexw] + [max(len(col), max_length(df[col])) + 2 for col in df.columns]
