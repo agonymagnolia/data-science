@@ -11,6 +11,8 @@ from streamlod.utils import key, id_join
 class ProcessDataUploadHandler(UploadHandler):
     def __init__(self):
         super().__init__()
+        # Initialize an empty set to track the activity ids present in the database
+        self.identifiers: Set[str] = set()
 
     def _json_map(self, activity: str) -> Dict[str, str]:
         return {
@@ -34,10 +36,19 @@ class ProcessDataUploadHandler(UploadHandler):
 
         try:
             con = sqlite3.connect(db)
-            return True
         except sqlite3.OperationalError as e:
             print(e)
             return False
+        else:
+            for activity in ACTIVITIES:
+                try:
+                    cursor = con.execute(f"SELECT internalId FROM {activity};")
+                    ids = (row[0] for row in cursor.fetchall())
+                    self.identifiers.update(ids)
+                except sqlite3.OperationalError:
+                    continue # Table does not exist, continue with next activity
+            con.close()
+            return True
 
     def pushDataToDb(self, path: str) -> bool:
         if not (db := self.getDbPathOrUrl()):
@@ -77,6 +88,9 @@ class ProcessDataUploadHandler(UploadHandler):
                 activity[col] = activity[col].str.strip()
             activity.internalId = name + '-' + activity.internalId  # Prefix internalId with activity name
 
+            # Filter out activity instances already in the database
+            activity = activity[~activity.internalId.isin(self.identifiers)]
+
             # Drop rows not compliant with the data model
             validate = [attr for attr, required in attrs.items() if required]
             activity.replace(r'', pd.NA, inplace=True)
@@ -84,6 +98,8 @@ class ProcessDataUploadHandler(UploadHandler):
 
             if activity.empty:
                 continue
+
+            self.identifiers.update(activity.internalId)  # Update existing activities set
 
             activities[name] = activity  # Store valid activities DataFrame linked to activity name
 
@@ -115,6 +131,7 @@ class ProcessDataUploadHandler(UploadHandler):
                 for activity in ACTIVITIES:
                     con.execute(f"DROP TABLE IF EXISTS {activity};")
                 con.execute(f"DROP TABLE IF EXISTS Tool;")
+            self.identifiers = set()
             return True
         except sqlite3.OperationalError as e:
             print(e)
