@@ -2,7 +2,7 @@ from typing import Union, List, Set, Iterable
 import pandas as pd
 
 from streamlod.handlers import MetadataQueryHandler, ProcessDataQueryHandler
-from streamlod.entities.mappings import ACTIVITIES
+from streamlod.entities.mappings import ACTIVITIES, ACQUISITION_ATTRIBUTES
 from streamlod.entities import (
     IdentifiableEntity,
     Person,
@@ -10,7 +10,7 @@ from streamlod.entities import (
     Activity,
     Acquisition
 )
-from streamlod.utils import key, rank
+from streamlod.utils import key, sorter
 import streamlod.entities as entities
 
 class BasicMashup:
@@ -59,19 +59,6 @@ class BasicMashup:
 
         return self._validate(df, entity_name)
 
-    def _selective_bfill(self, group: pd.DataFrame, activity_names: List[str]) -> pd.DataFrame:
-        """
-        Performs backward filling on a column subset within each group of rows if all values in the first row are NaN.
-        This is done to fill in missing values for the same activity type on the same cultural heritage object across different databases.
-        """
-        is_undefined = group.iloc[0].isna() # Boolean mask on the first row of the same-id group
-        for name in activity_names:
-            if is_undefined[name].all(): # If all values of the activity are NaNs
-                # Perform backward filling on those columns
-                group[name] = group[name].infer_objects(copy=False).bfill(axis=0) # Inferring data types is required to ensure that downcasting after bfill is handled correctly
-
-        return group.iloc[0] # Only the first row of the group is returned
-
     def _integrate(self, dfs: List[pd.DataFrame], entity_name: str) -> pd.DataFrame:
         """
         Concatenates DataFrames and sorts them again according to a class-dependent parameter.
@@ -82,7 +69,6 @@ class BasicMashup:
         would result in the loss of this potentially valuable data.
         """
         df = pd.concat(dfs)
-
         match entity_name:
             case 'Person':
                 df = df.sort_values(by='name', ignore_index=True)
@@ -91,10 +77,7 @@ class BasicMashup:
                 df = df.sort_values(by=['identifier', 'p_name'], key=lambda x: x.map(key), ignore_index=True)
                 df.update(df.groupby('identifier').bfill())
             case 'Activity':
-                activity_names = df.columns.get_level_values(0).unique()
-                df = df.sort_index(key=lambda x: x.map(key)) \
-                       .groupby(level=0).apply(lambda group: self._selective_bfill(group, activity_names))
-                df = df[sorted(df.columns, key=lambda x: rank[x[0]])]
+                df = df.sort_index(key=sorter)
 
         return df
 
@@ -112,7 +95,7 @@ class BasicMashup:
                     ~(df['p_identifier'].notna() ^ df['p_name'].notna()) # Reversed XOR operator: either the author is fully defined or they are not
                 ]
             case 'Activity':
-                df = df[~df.index.duplicated()]
+                df = df.reindex(list(ACQUISITION_ATTRIBUTES)[1:], axis=1)
 
         return df
        
@@ -159,24 +142,23 @@ class BasicMashup:
             return []
 
         result: List[Activity] = []
-        objects = self.getCulturalHeritageObjectsByIds(df.index)
+        object_ids = df.index.get_level_values(0).unique()
+        objects = self.getCulturalHeritageObjectsByIds(object_ids)
         object_ids = set(obj.identifier for obj in objects)
-
-        # Map activity names to their corresponding classes and attribute counts
-        row_map = [
-            (getattr(entities, activity_name), len(ACTIVITIES[activity_name]) - 1) # Do not count 'refersTo'
-            for activity_name in df.columns.get_level_values(0).unique()
-        ]
+        df = df[df.index.get_level_values(0).isin(object_ids)]
+        index1, index2 = df.index.get_level_values(0).factorize()[0], df.index.get_level_values(1)
+        activities = df.index.get_level_values(1).unique()
+        activity_class = {activity: getattr(entities, activity) for activity in activities}
+        array = df.to_numpy(dtype=object, na_value=None)
 
         # Iterate through the DataFrame rows, creating Activity instances and linking them with cultural heritage objects
-        array = df[df.index.isin(object_ids)].to_numpy(dtype=object, na_value=None)
-        for obj, row in zip(objects, array):
-            index = 0
-            for activity_class, step in row_map:
-                data = row[index:index + step]
-                if data[0]: # Only create an activity if institute is defined
-                    result.append(activity_class(obj, *data))
-                index += step
+        for object_id, activity_name, data in zip(index1, index2, array):
+            obj = objects[object_id]
+            if activity_name == 'Acquisition':
+                result.append(Acquisition(obj, *data))
+            else:
+                activity = activity_class[activity_name]
+                result.append(activity(obj, *data[1:]))
 
         return result
 

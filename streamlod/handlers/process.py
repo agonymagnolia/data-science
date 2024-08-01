@@ -5,7 +5,7 @@ import sqlite3
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
 from streamlod.entities.mappings import ACTIVITIES
-from streamlod.utils import key, id_join
+from streamlod.utils import id_join, sorter
 
 
 class ProcessDataUploadHandler(UploadHandler):
@@ -24,6 +24,28 @@ class ProcessDataUploadHandler(UploadHandler):
             f'{activity}.start date': 'start',
             f'{activity}.end date': 'end'
         }
+
+    def _unique_internalId(self, base_id: str) -> str:
+        identifiers = self.identifiers
+        if base_id not in identifiers:
+            identifiers.add(base_id)
+            return base_id
+
+        chrs = 'abcdefghijklmnopqrstuvwxyz'
+        i = 0
+        while True:
+            index = i % len(chrs)
+            suffix = chrs[index]
+            new_id = f"{base_id}{suffix}"
+
+            if i != 0 and index == 0:
+                return self._unique_internalId(new_id)
+
+            if new_id not in identifiers:
+                identifiers.add(new_id)
+                return new_id
+
+            i += 1
 
     def setDbPathOrUrl(self, newDbPathOrUrl: str, *, reset: bool = False) -> bool:
         # Set the new database path
@@ -88,8 +110,8 @@ class ProcessDataUploadHandler(UploadHandler):
                 activity[col] = activity[col].str.strip()
             activity.internalId = name + '-' + activity.internalId  # Prefix internalId with activity name
 
-            # Filter out activity instances already in the database
-            activity = activity[~activity.internalId.isin(self.identifiers)]
+            # Rename activity instances already in the database
+            activity.internalId = activity.internalId.apply(self._unique_internalId)
 
             # Drop rows not compliant with the data model
             validate = [attr for attr, required in attrs.items() if required]
@@ -98,8 +120,6 @@ class ProcessDataUploadHandler(UploadHandler):
 
             if activity.empty:
                 continue
-
-            self.identifiers.update(activity.internalId)  # Update existing activities set
 
             activities[name] = activity  # Store valid activities DataFrame linked to activity name
 
@@ -196,15 +216,16 @@ class ProcessDataQueryHandler(QueryHandler):
 
         # Build and execute the query for each activity
         for name in activity_list:
-            attrs = list(ACTIVITIES[name])[:-1] # Exclude the tool column
+            attrs = list(ACTIVITIES[name])[1:]
+            attrs.remove('tool') # Exclude the tool column
             cols = ", ".join(attrs)
             query = f"""
-                SELECT {cols}, GROUP_CONCAT(T.tool) AS tool
+                SELECT refersTo, {cols}, GROUP_CONCAT(T.tool) AS tool
                 FROM {name} AS A
                 JOIN Tool AS T
                 ON A.internalId = T.internalId
                 {condition}
-                GROUP BY {cols};
+                GROUP BY A.internalId, {cols};
                 """
             try:
                 with sqlite3.connect(db) as con:
@@ -225,8 +246,8 @@ class ProcessDataQueryHandler(QueryHandler):
             return pd.DataFrame()
 
         # Concatenate activity DataFrames sorting alphanumerically the index
-        return pd.concat(activities.values(), axis=0, join='outer', keys=activities.keys()) \
-                 .sort_index(key=lambda x: x.map(key))
+        return pd.concat(activities.values(), axis=0, join='outer', keys=activities.keys(), names=['activity']) \
+                 .swaplevel().sort_index(key=sorter)
 
     def getById(self, identifier: Union[str, List[str]]) -> pd.DataFrame:
         # Normalize identifiers to a string

@@ -1,4 +1,5 @@
 from typing import Union, List
+import pandas as pd
 
 def id_join(identifiers: Union[str, int, List[str]], join_char: str = ' ') -> str:
     """
@@ -34,3 +35,11 @@ rank = {
     'Optimising': 4,
     'Exporting': 5
 }
+
+def sorter(index: pd.Index) -> pd.Index:
+    if index.name == 'refersTo':
+        return index.map(key)
+    elif index.name == 'activity':
+        return index.map(rank)
+    else:
+        return index

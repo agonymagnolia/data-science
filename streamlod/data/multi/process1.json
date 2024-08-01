@@ -585,6 +585,15 @@
     },
     {
         "object id": "13",
+        "exporting": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-06-16",
+            "end date": "2023-06-16"
+        },
         "acquisition": {
             "responsible institute": "Council",
             "responsible person": "Alice Liddell",
@@ -620,15 +629,6 @@
                 "Instant Meshes-3DF Zephyr"
             ],
             "start date": "2023-06-14",
-            "end date": "2023-06-16"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
-            ],
-            "start date": "2023-06-16",
             "end date": "2023-06-16"
         }
     },
@@ -675,6 +675,15 @@
     },
     {
         "object id": "15",
+        "exporting": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-09-10",
+            "end date": "2023-09-10"
+        },
         "acquisition": {
             "responsible institute": "Council",
             "responsible person": "Alice Liddell",
@@ -710,15 +719,6 @@
                 "Instant Meshes",
                 "3DFZephyr",
                 "Gimp "
-            ],
-            "start date": "2023-09-10",
-            "end date": "2023-09-10"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
             ],
             "start date": "2023-09-10",
             "end date": "2023-09-10"

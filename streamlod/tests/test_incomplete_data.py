@@ -148,7 +148,7 @@ class TestIncompleteData(unittest.TestCase):
         self.assertEqual(p1[1].tool, set())
 
         # Institute from second push on db1 because in first push the activity was discarded
-        self.assertEqual(p1[2].institute, 'Philology')
+        self.assertEqual(p1[-1].institute, 'Philology')
 
         # Integration of new type of activity on same object from different db
         self.assertTrue(any(isinstance(activity, Optimising) for activity in p2))

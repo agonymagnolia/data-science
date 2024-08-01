@@ -95,8 +95,8 @@ class Acquisition(Activity):
     def __init__(
         self,
         refersTo: CulturalHeritageObject,
-        institute: str,
         technique: str,
+        institute: str,
         person: Optional[str] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,

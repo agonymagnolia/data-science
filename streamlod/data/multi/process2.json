@@ -939,6 +939,15 @@
     },
     {
         "object id": "15",
+        "exporting": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Blender"
+            ],
+            "start date": "2023-09-10",
+            "end date": "2023-09-10"
+        },
         "acquisition": {
             "responsible institute": "Council",
             "responsible person": "Alice Liddell",
@@ -974,15 +983,6 @@
                 "Instant Meshes",
                 "3DFZephyr",
                 "Gimp "
-            ],
-            "start date": "2023-09-10",
-            "end date": "2023-09-10"
-        },
-        "exporting": {
-            "responsible institute": "Philology",
-            "responsible person": "Grace Hopper",
-            "tool": [
-                "Blender"
             ],
             "start date": "2023-09-10",
             "end date": "2023-09-10"
