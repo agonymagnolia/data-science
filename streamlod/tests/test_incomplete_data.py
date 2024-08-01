@@ -166,5 +166,61 @@ class TestIncompleteData(unittest.TestCase):
         sorted_activities = sorted(activities)
         self.assertEqual(activities, sorted_activities)
 
+class TestDuplicateData(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        m1 = 'streamlod' + sep + 'data' + sep + 'duplicate' + sep + 'meta1.csv'
+        m1bis = 'streamlod' + sep + 'data' + sep + 'duplicate' + sep + 'meta1bis.csv'
+        m2 = 'streamlod' + sep + 'data' + sep + 'duplicate' + sep + 'meta2.csv'
+        p1 = 'streamlod' + sep + 'data' + sep + 'duplicate' + sep + 'process1.json'
+        p1bis = 'streamlod' + sep + 'data' + sep + 'duplicate' + sep + 'process1bis.json'
+        p2 = 'streamlod' + sep + 'data' + sep + 'duplicate' + sep + 'process2.json'
+        gdb1 = 'http://127.0.0.1:9999/blazegraph/sparql'
+        gdb2 = 'http://127.0.0.1:19999/blazegraph/sparql'
+        rdb1 = 'streamlod' + sep + 'databases' + sep + 'relational1.db'
+        rdb2 = 'streamlod' + sep + 'databases' + sep + 'relational2.db'
+
+        muh = MetadataUploadHandler()
+        muh.setDbPathOrUrl(gdb1, reset=True)
+        muh.pushDataToDb(m1)
+        muh.pushDataToDb(m1bis)
+        muh.setDbPathOrUrl(gdb2, reset=True)
+        muh.pushDataToDb(m2)
+
+        puh = ProcessDataUploadHandler()
+        puh.setDbPathOrUrl(rdb1, reset=True)
+        puh.pushDataToDb(p1)
+        puh.pushDataToDb(p1bis)
+        puh.setDbPathOrUrl(rdb2, reset=True)
+        puh.pushDataToDb(p2)
+
+        mqh1 = MetadataQueryHandler()
+        mqh1.setDbPathOrUrl(gdb1)
+        mqh2 = MetadataQueryHandler()
+        mqh2.setDbPathOrUrl(gdb2)
+        pqh1 = ProcessDataQueryHandler()
+        pqh1.setDbPathOrUrl(rdb1)
+        pqh2 = ProcessDataQueryHandler()
+        pqh2.setDbPathOrUrl(rdb2)
+
+        cls.m = AdvancedMashup()
+        cls.m.addMetadataHandler(mqh1)
+        cls.m.addMetadataHandler(mqh2)
+        cls.m.addProcessHandler(pqh1)
+        cls.m.addProcessHandler(pqh2)
+
+    def test_08_duplicatealot(self):
+        dfs1 = []
+        for pqh in self.m.processQuery:
+            dfs1.append(pqh.getById('1'))
+        p1 = self.m.toActivity(dfs1)
+
+        for p in p1:
+            self.assertEqual(p1[0], p)
+        
+        self.assertEqual(len(p1), 60)
+
+
 if __name__ == '__main__':
     unittest.main()
