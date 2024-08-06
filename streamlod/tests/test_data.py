@@ -13,7 +13,7 @@ from streamlod.handlers import MetadataUploadHandler, ProcessDataUploadHandler, 
 from streamlod.mashups import AdvancedMashup
 from streamlod.entities import Person, CulturalHeritageObject, Activity, Acquisition, Optimising
 
-class TestIncompleteData(unittest.TestCase):
+class Test_01_IncompleteData(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -148,7 +148,7 @@ class TestIncompleteData(unittest.TestCase):
         self.assertEqual(p1[1].tool, set())
 
         # Institute from second push on db1 because in first push the activity was discarded
-        self.assertEqual(p1[-1].institute, 'Philology')
+        self.assertEqual(p1[4].institute, 'Philology')
 
         # Integration of new type of activity on same object from different db
         self.assertTrue(any(isinstance(activity, Optimising) for activity in p2))
@@ -166,7 +166,7 @@ class TestIncompleteData(unittest.TestCase):
         sorted_activities = sorted(activities)
         self.assertEqual(activities, sorted_activities)
 
-class TestDuplicateData(unittest.TestCase):
+class Test_02_DuplicateData(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -210,7 +210,7 @@ class TestDuplicateData(unittest.TestCase):
         cls.m.addProcessHandler(pqh1)
         cls.m.addProcessHandler(pqh2)
 
-    def test_08_duplicatealot(self):
+    def test_01_duplicatealot(self):
         dfs1 = []
         for pqh in self.m.processQuery:
             dfs1.append(pqh.getById('1'))

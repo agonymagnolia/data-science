@@ -65,22 +65,22 @@ IDE: Dict[str, EntityMap] = {
 
 # Activity mapping
 ACTIVITY_ATTRIBUTES: AttributeMap = {
-    'refersTo': True,
-    'institute': True,
-    'person': False,
-    'start': False,
-    'end': False,
-    'tool': False
+    'refersTo': (True, False),
+    'institute': (True, False),
+    'person': (False, False),
+    'start': (False, False),
+    'end': (False, False),
+    'tool': (False, True)
 }
 
 ACQUISITION_ATTRIBUTES: AttributeMap = {
-    'refersTo': True,
-    'technique': True,
-    'institute': True,
-    'person': False,
-    'start': False,
-    'end': False,
-    'tool': False,
+    'refersTo': (True, False),
+    'technique': (True, False),
+    'institute': (True, False),
+    'person': (False, False),
+    'start': (False, False),
+    'end': (False, False),
+    'tool': (False, True)
 }
 
 ACTIVITIES: Dict[str, AttributeMap] = {

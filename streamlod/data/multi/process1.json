@@ -38,6 +38,17 @@
             "start date": "2023-05-07",
             "end date": "2023-06-07"
         },
+        "optimising": {
+            "responsible institute": "Philology",
+            "responsible person": "Grace Hopper",
+            "tool": [
+                "Gimp",
+                "Blender",
+                "Instant Meshes"
+            ],
+            "start date": "2023-05-07",
+            "end date": "2023-06-07"
+        },
         "exporting": {
             "responsible institute": "Philology",
             "responsible person": "Grace Hopper",

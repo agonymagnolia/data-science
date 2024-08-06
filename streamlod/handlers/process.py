@@ -9,11 +9,6 @@ from streamlod.utils import id_join, sorter
 
 
 class ProcessDataUploadHandler(UploadHandler):
-    def __init__(self):
-        super().__init__()
-        # Initialize an empty set to track the activity ids present in the database
-        self.identifiers: Set[str] = set()
-
     def _json_map(self, activity: str) -> Dict[str, str]:
         return {
             'object id': 'refersTo',
@@ -25,28 +20,6 @@ class ProcessDataUploadHandler(UploadHandler):
             f'{activity}.end date': 'end'
         }
 
-    def _unique_internalId(self, base_id: str) -> str:
-        identifiers = self.identifiers
-        if base_id not in identifiers:
-            identifiers.add(base_id)
-            return base_id
-
-        chrs = 'abcdefghijklmnopqrstuvwxyz'
-        i = 0
-        while True:
-            index = i % len(chrs)
-            suffix = chrs[index]
-            new_id = f"{base_id}{suffix}"
-
-            if i != 0 and index == 0:
-                return self._unique_internalId(new_id)
-
-            if new_id not in identifiers:
-                identifiers.add(new_id)
-                return new_id
-
-            i += 1
-
     def setDbPathOrUrl(self, newDbPathOrUrl: str, *, reset: bool = False) -> bool:
         # Set the new database path
         if not super().setDbPathOrUrl(newDbPathOrUrl):
@@ -55,22 +28,41 @@ class ProcessDataUploadHandler(UploadHandler):
             return False
 
         db = self.getDbPathOrUrl()
-
         try:
-            con = sqlite3.connect(db)
+            with sqlite3.connect(db) as con:
+                cursor = con.cursor()
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS Activity (
+                        internalId INTEGER PRIMARY KEY
+                    );
+                ''')
+                for activity, attrs in ACTIVITIES.items():
+                    cols = []
+                    for attr, (required, multivalued) in attrs.items():
+                        if multivalued:
+                            cursor.execute(f'''
+                                CREATE TABLE IF NOT EXISTS {attr.capitalize()} (
+                                    activityId INTEGER,
+                                    {attr} TEXT,
+                                    FOREIGN KEY(activityId) REFERENCES Activity(internalId) ON DELETE CASCADE
+                                );
+                            ''')
+                        elif required:
+                            cols.append(f'{attr} TEXT NOT NULL')
+                        else:
+                            cols.append(f'{attr} TEXT')
+                    cols_str = ',\n                        '.join(cols)
+                    cursor.execute(f'''
+                        CREATE TABLE IF NOT EXISTS {activity} (
+                            internalId INTEGER PRIMARY KEY,
+                            {cols_str},
+                            FOREIGN KEY(internalId) REFERENCES Activity(internalId) ON DELETE CASCADE
+                        );
+                    ''')
+            return True
         except sqlite3.OperationalError as e:
             print(e)
             return False
-        else:
-            for activity in ACTIVITIES:
-                try:
-                    cursor = con.execute(f"SELECT internalId FROM {activity};")
-                    ids = (row[0] for row in cursor.fetchall())
-                    self.identifiers.update(ids)
-                except sqlite3.OperationalError:
-                    continue # Table does not exist, continue with next activity
-            con.close()
-            return True
 
     def pushDataToDb(self, path: str) -> bool:
         if not (db := self.getDbPathOrUrl()):
@@ -90,13 +82,12 @@ class ProcessDataUploadHandler(UploadHandler):
 
         # Flatten the JSON document into a DataFrame
         df = pd.json_normalize(json_doc)
-        df['internalId'] = df.iloc[:, 0]  # Copy object id to internalId for activity identification
-
+        
         activities, tools = {}, pd.DataFrame()  # Initialize storage for activities and tools
 
         # Process each activity
         for name, attrs in ACTIVITIES.items():
-            cols = ['internalId'] + list(attrs)
+            cols = list(attrs)
             
             # Rename and select relevant columns
             try:
@@ -108,24 +99,27 @@ class ProcessDataUploadHandler(UploadHandler):
             tool = activity.pop('tool')
             for col in activity:
                 activity[col] = activity[col].str.strip()
-            activity.internalId = name + '-' + activity.internalId  # Prefix internalId with activity name
 
-            # Rename activity instances already in the database
-            activity.internalId = activity.internalId.apply(self._unique_internalId)
-
-            # Drop rows not compliant with the data model
-            validate = [attr for attr, required in attrs.items() if required]
+            # Drop rows not compliant to the data model
+            validate = [attr for attr, (required, _) in attrs.items() if required]
             activity.replace(r'', pd.NA, inplace=True)
             activity = activity[(activity[validate].notna() & activity.map(lambda x: isinstance(x, str))).all(axis=1)]
 
             if activity.empty:
                 continue
 
+            with sqlite3.connect(db) as con:
+                cursor = con.cursor()
+                cursor.executemany('INSERT INTO Activity DEFAULT VALUES', [()] * len(activity)) # List of tuples
+                cursor.execute('SELECT * FROM (SELECT internalId FROM Activity ORDER BY internalId DESC LIMIT ?) ORDER BY internalId', (len(activity),))
+                activity['internalId'] = [row[0] for row in cursor.fetchall()]
+
             activities[name] = activity  # Store valid activities DataFrame linked to activity name
 
             # Split lists in tool column into separate rows with the same internalId
             split = pd.concat([activity.internalId, tool], axis=1)
-            split = split[split.internalId.notna()].explode('tool')
+            split.rename(columns={'internalId':'activityId'}, inplace=True)
+            split = split[split.activityId.notna()].explode('tool')
             split.tool = split.tool.str.strip()
 
             tools = pd.concat([tools, split], ignore_index=True)  # Accumulate tools
@@ -148,10 +142,10 @@ class ProcessDataUploadHandler(UploadHandler):
         db = self.getDbPathOrUrl()
         try:
             with sqlite3.connect(db) as con:
+                con.execute(f"DROP TABLE IF EXISTS Activity;")
                 for activity in ACTIVITIES:
                     con.execute(f"DROP TABLE IF EXISTS {activity};")
                 con.execute(f"DROP TABLE IF EXISTS Tool;")
-            self.identifiers = set()
             return True
         except sqlite3.OperationalError as e:
             print(e)
@@ -175,18 +169,12 @@ class ProcessDataQueryHandler(QueryHandler):
         with sqlite3.connect(db) as con:
             cursor = con.cursor()
 
-            # Check for the existence of each table before adding its query
             for name in activity_list:
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,))
-                if cursor.fetchone(): # If the table exists in the db
-                    sql = f"""
-                        SELECT {attribute}
-                        FROM {name}
-                        {condition}"""
-                    subqueries.append(sql)
-
-            if not subqueries:
-                return []
+                sql = f"""
+                    SELECT {attribute}
+                    FROM {name}
+                    {condition}"""
+                subqueries.append(sql)
 
             # Combine subqueries using UNION
             query = '\nUNION\n'.join(subqueries) + ';'
@@ -223,15 +211,12 @@ class ProcessDataQueryHandler(QueryHandler):
                 SELECT refersTo, {cols}, GROUP_CONCAT(T.tool) AS tool
                 FROM {name} AS A
                 JOIN Tool AS T
-                ON A.internalId = T.internalId
+                ON A.internalId = T.activityId
                 {condition}
                 GROUP BY A.internalId, {cols};
                 """
-            try:
-                with sqlite3.connect(db) as con:
-                    activity = pd.read_sql_query(query, con)
-            except pd.errors.DatabaseError:
-                continue # Activity table not found
+            with sqlite3.connect(db) as con:
+                activity = pd.read_sql_query(query, con, index_col='refersTo')
 
             # Skip activity if no instance fulfills the condition
             if activity.empty:
@@ -239,7 +224,7 @@ class ProcessDataQueryHandler(QueryHandler):
 
             # Split tool combined string in a set and set 'refersTo' as index
             activity.tool = activity.tool.apply(lambda x: set(x.split(',')) if x else None)
-            activities[name] = activity.set_index('refersTo')
+            activities[name] = activity
 
         # Return an empty DataFrame if no valid activities are found
         if not activities:
