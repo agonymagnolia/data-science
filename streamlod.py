@@ -19,9 +19,7 @@ metadata_upload_path = metadata_uh.setDbPathOrUrl(metadata_endpoint, reset=True)
 process_upload_path = process_uh.setDbPathOrUrl(process_db_path, reset=True)
 
 metadata_push1 = metadata_uh.pushDataToDb(metadata_csv_path)
-metadata_push2 = metadata_uh.pushDataToDb(metadata_csv_path) # test to manage multiple pushes
 process_push1 = process_uh.pushDataToDb(process_json_path)
-process_push2 = process_uh.pushDataToDb(process_json_path) # test to manage multiple pushes
 
 metadata_qh = MetadataQueryHandler()
 process_qh = ProcessDataQueryHandler()
@@ -30,9 +28,7 @@ process_query_path = process_qh.setDbPathOrUrl(process_db_path)
 
 mashup = AdvancedMashup()
 mashup.addMetadataHandler(metadata_qh)
-mashup.addMetadataHandler(metadata_qh) # test to manage multiple query handlers
 mashup.addProcessHandler(process_qh)
-mashup.addProcessHandler(process_qh) # test to manage multiple query handlers
 
 title_print('UPLOAD HANDLERS')
 print(f"\n{'—' * WIDTH}\n")
@@ -43,17 +39,11 @@ rich_print(metadata_upload_path)
 print('\nMetadata First Push:')
 rich_print(metadata_push1)
 
-print('\nMetadata Second Push:')
-rich_print(metadata_push2)
-
 print('\nProcess Set Path:')
 rich_print(process_upload_path)
 
 print('\nProcess First Push:')
 rich_print(process_push1)
-
-print('\nProcess Second Push:')
-rich_print(process_push2)
 
 
 title_print('METADATA QUERY AND MASHUP')

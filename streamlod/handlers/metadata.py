@@ -11,7 +11,7 @@ from io import StringIO
 from streamlod.handlers.base import UploadHandler, QueryHandler
 import streamlod.entities as entities
 from streamlod.entities.mappings import IDE, BASE, NS, Relation, MapMeta, Some
-from streamlod.utils import id_join, key
+from streamlod.utils import id_join
 
 if TYPE_CHECKING:
     from pandas._libs.missing import NAType

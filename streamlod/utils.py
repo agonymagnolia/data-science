@@ -36,10 +36,10 @@ rank = {
     'Exporting': 5
 }
 
-def sorter(index: pd.Index) -> pd.Index:
-    if index.name == 'refersTo':
-        return index.map(key)
-    elif index.name == 'activity':
-        return index.map(rank)
+def sorter(s: pd.Index | pd.Series) -> pd.Index | pd.Series:
+    if s.name == 'refersTo' or s.name == 'identifier':
+        return s.map(key)
+    elif s.name == 'class':
+        return s.map(rank)
     else:
-        return index
+        return s

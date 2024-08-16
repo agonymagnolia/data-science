@@ -42,8 +42,7 @@ class AdvancedMashup(BasicMashup):
 
         for handler in self.processQuery:
             ids = handler.getAttribute(
-                activity_list=['Acquisition'],
-                condition=f"WHERE start >= '{start}' AND end <= '{end}'"
+                condition=f"WHERE class LIKE 'Acquisition' AND start >= '{start}' AND end <= '{end}'"
             )
             object_ids.update(ids)
 

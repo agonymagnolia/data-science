@@ -10,7 +10,7 @@ from streamlod.entities import (
     Activity,
     Acquisition
 )
-from streamlod.utils import key, sorter
+from streamlod.utils import sorter
 import streamlod.entities as entities
 
 class BasicMashup:
@@ -74,10 +74,10 @@ class BasicMashup:
                 df = df.sort_values(by='name', ignore_index=True)
                 df.update(df.groupby('identifier').bfill())
             case 'CHO':
-                df = df.sort_values(by=['identifier', 'p_name'], key=lambda x: x.map(key), ignore_index=True)
+                df = df.sort_values(by=['identifier', 'p_name'], key=sorter, ignore_index=True)
                 df.update(df.groupby('identifier').bfill())
             case 'Activity':
-                df = df.sort_index(key=sorter)
+                df = df.sort_values(by=['refersTo', 'class'], key=sorter)
 
         return df
 
@@ -95,7 +95,7 @@ class BasicMashup:
                     ~(df['p_identifier'].notna() ^ df['p_name'].notna()) # Reversed XOR operator: either the author is fully defined or they are not
                 ]
             case 'Activity':
-                df = df.reindex(list(ACQUISITION_ATTRIBUTES)[1:], axis=1)
+                pass # Activites are already validated when loaded in the database
 
         return df
        
@@ -121,12 +121,15 @@ class BasicMashup:
         result: List[CulturalHeritageObject] = []
         object_id = '' # Variable to track the current object identifier
 
+        # Convert object class name to class reference
+        classes = {obj: getattr(entities, obj) for obj in df['class'].unique()}
+        df.loc[:,'class'] = df['class'].map(classes)
+
         for row in df.to_numpy(dtype=object, na_value=None):
             # Create a new object if the identifier is different from the previous row
             if object_id != row[1]:
                 object_id = row[1]
-                object_class = getattr(entities, row[0])
-                result.append(object_class(*row[1:-2]))
+                result.append(row[0](*row[1:-2]))
             # Append author to the hasAuthor list if present
             if row[-2]:
                 result[-1].hasAuthor.append(Person(*row[-2:]))
@@ -142,23 +145,26 @@ class BasicMashup:
             return []
 
         result: List[Activity] = []
-        object_ids = df.index.get_level_values(0).unique()
-        objects = self.getCulturalHeritageObjectsByIds(object_ids)
-        object_ids = set(obj.identifier for obj in objects)
-        df = df[df.index.get_level_values(0).isin(object_ids)]
-        index1, index2 = df.index.get_level_values(0).factorize()[0], df.index.get_level_values(1)
-        activities = df.index.get_level_values(1).unique()
-        activity_class = {activity: getattr(entities, activity) for activity in activities}
-        array = df.to_numpy(dtype=object, na_value=None)
 
-        # Iterate through the DataFrame rows, creating Activity instances and linking them with cultural heritage objects
-        for object_id, activity_name, data in zip(index1, index2, array):
-            obj = objects[object_id]
-            if activity_name == 'Acquisition':
-                result.append(Acquisition(obj, *data))
+        # Make sure all objects the activities refer to are present in the database
+        objects = self.getCulturalHeritageObjectsByIds(df.refersTo.unique())
+        object_ids = set(obj.identifier for obj in objects)
+        df = df[df.refersTo.isin(object_ids)]
+
+        # Convert object reference to position in object list
+        df.refersTo = df.refersTo.factorize()[0]
+
+        # Convert activity class name to class reference
+        classes = {activity: getattr(entities, activity) for activity in df['class'].unique()}
+        df.loc[:,'class'] = df['class'].map(classes)
+
+        # Iterate through the DataFrame rows, creating activity instances and linking them with cultural heritage objects
+        for row in df.to_numpy(dtype=object, na_value=None):
+            obj = objects[row[1]]
+            if row[0] is Acquisition:
+                result.append(Acquisition(obj, *row[2:]))
             else:
-                activity = activity_class[activity_name]
-                result.append(activity(obj, *data[1:]))
+                result.append(row[0](obj, *row[3:]))
 
         return result
 
