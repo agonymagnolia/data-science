@@ -95,7 +95,7 @@ class BasicMashup:
                     ~(df['p_identifier'].notna() ^ df['p_name'].notna()) # Reversed XOR operator: either the author is fully defined or they are not
                 ]
             case 'Activity':
-                pass # Activites are already validated when loaded in the database
+                pass # Activites are validated when loaded in the database
 
         return df
        

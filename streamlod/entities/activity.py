@@ -21,7 +21,7 @@ class Activity:
         self.end = end
         # Since the relation is homonymous with the method accessing it, it is declared as internal
         # and renamed via the property decorator
-        self._refersTo = refersTo
+        self.object = refersTo
 
     def __repr__(self) -> str:
         return (
@@ -31,11 +31,11 @@ class Activity:
             f'tool={self.tool!r}, '
             f'start={self.start!r}, '
             f'end={self.end!r}, '
-            f'refersTo={self._refersTo!r})'
+            f'refersTo={self.object!r})'
         )
 
     def __rich_repr__(self):
-        yield int(self.refersTo.identifier) if self.refersTo.identifier.isdigit() else self.refersTo.identifier
+        yield int(self.object.identifier) if self.object.identifier.isdigit() else self.object.identifier
         yield "institute", self.institute
         yield "person", self.person
         yield "tool", self.tool
@@ -50,11 +50,11 @@ class Activity:
                 frozenset(self.tool) == frozenset(other.tool) and
                 self.start == other.start and
                 self.end == other.end and
-                self._refersTo == other._refersTo)
+                self.object == other.object)
     
     def __lt__(self, other) -> bool:
-        if self._refersTo != other._refersTo:
-            return self._refersTo < other._refersTo
+        if self.object != other.object:
+            return self.object < other.object
         else:
             return rank[self.__class__.__name__] < rank[other.__class__.__name__]
 
@@ -65,7 +65,7 @@ class Activity:
             frozenset(self.tool),
             self.start,
             self.end,
-            self._refersTo))
+            self.object))
 
     def getResponsibleInstitute(self) -> str:
         return self.institute
@@ -81,14 +81,9 @@ class Activity:
     
     def getEndDate(self) -> Union[str, None]:
         return self.end
-    
-    @property
-    def refersTo(self) -> CulturalHeritageObject:
-        return self._refersTo
 
-    @refersTo.setter
-    def refersTo(self, value: CulturalHeritageObject) -> None:
-        self._refersTo = value
+    def refersTo(self) -> CulturalHeritageObject:
+        return self.object
 
 
 class Acquisition(Activity):
@@ -114,11 +109,11 @@ class Acquisition(Activity):
             f'tool={self.tool!r}, '
             f'start={self.start!r}, '
             f'end={self.end!r}, '
-            f'refersTo={self._refersTo!r})'
+            f'refersTo={self.object!r})'
         )
 
     def __rich_repr__(self):
-        yield int(self.refersTo.identifier) if self.refersTo.identifier.isdigit() else self.refersTo.identifier
+        yield int(self.object.identifier) if self.object.identifier.isdigit() else self.object.identifier
         yield "institute", self.institute
         yield "person", self.person
         yield "technique", self.technique
@@ -137,7 +132,7 @@ class Acquisition(Activity):
             frozenset(self.tool),
             self.start,
             self.end,
-            self._refersTo))
+            self.object))
 
     def getTechnique(self) -> str:
         return self.technique

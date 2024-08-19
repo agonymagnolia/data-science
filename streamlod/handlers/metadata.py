@@ -213,7 +213,7 @@ class MetadataQueryHandler(QueryHandler, metaclass=MapMeta):
         wrapper.setQuery(query)
         result = wrapper.queryAndConvert()
         _csv = StringIO(result.decode('utf-8'))
-        return pd.read_csv(_csv, sep=",", dtype='string')
+        return pd.read_csv(_csv, sep=',', dtype='object')
 
     def getEntities(
         self,

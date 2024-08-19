@@ -110,7 +110,7 @@ class Test_01_IncompleteData(unittest.TestCase):
         activities = self.m.getAllActivities()
         for activity in activities:
             self.assertIsInstance(activity.institute, str)
-            self.assertIsInstance(activity.refersTo, CulturalHeritageObject)
+            self.assertIsInstance(activity.object, CulturalHeritageObject)
             self.assertTrue(isinstance(activity.person, str) or activity.person is None)
             self.assertTrue(isinstance(activity.start, str) or activity.start is None)
             self.assertTrue(isinstance(activity.end, str) or activity.end is None)
@@ -161,7 +161,7 @@ class Test_01_IncompleteData(unittest.TestCase):
     def test_06_refersTo_correctness(self):
         objects = self.m.getAllCulturalHeritageObjects()
         for activity in self.m.getAllActivities():
-            self.assertIn(activity.refersTo, objects)
+            self.assertIn(activity.object, objects)
 
     def test_07_process_order(self):
         activities = self.m.getAllActivities()

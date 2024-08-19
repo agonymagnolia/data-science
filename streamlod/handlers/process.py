@@ -1,14 +1,10 @@
 from typing import Union, Any, List, Dict, Set, Mapping, Iterable
 import pandas as pd
-import numpy as np
 import json
 import sqlite3
 
 from streamlod.handlers.base import UploadHandler, QueryHandler
-from streamlod.entities.mappings import ACTIVITIES, ACTIVITY_ATTRIBUTES, ACQUISITION_ATTRIBUTES
 from streamlod.utils import id_join, sorter
-
-ATTRS = ['class', 'refersTo', 'technique', 'institute', 'person', 'start', 'end']
 
 class ProcessDataUploadHandler(UploadHandler):
     _json_map = {
@@ -55,35 +51,36 @@ class ProcessDataUploadHandler(UploadHandler):
             print(e)
             return False
 
-    def validate(self, df: pd.DataFrame) -> pd.DataFrame:
-        mask = pd.DataFrame(ACTIVITIES).T
+    def _validate(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Reshape DataFrame with attributes as columns
+        df.columns = df.columns.str.capitalize().str.split('.', expand=True)
+        df = df.set_index(df.columns[0]) \
+               .stack(level=0, future_stack=True) \
+               .rename(columns=self._json_map) \
+               .reset_index(names=['refersTo', 'class']) \
+               .reindex(['class', 'refersTo', 'technique', 'institute', 'person', 'start', 'end', 'tool'], axis=1) # Allow for missing columns like technique, filled with NaNs
 
-        # Reshape DataFrame with activity classes as index and attributes as columns
-        df.set_index('object id', inplace=True)
-        df.columns = pd.MultiIndex.from_tuples(((activity.capitalize(), self._json_map[attr]) for activity, attr in df.columns.str.split('.')), names=['class', 'attributes'])
-        df = df.stack(level=0, future_stack=True) \
-               .reset_index(level='object id', names='refersTo') \
-               .reindex(mask.columns, axis=1) # Allow for missing columns like technique, filled with NaNs
+        # Strip whitespaces and handle missing values
+        attributes = ['class', 'refersTo', 'technique', 'institute', 'person', 'start', 'end']
+        df[attributes] = df[attributes].astype('string').apply(lambda x: x.str.strip(), axis=1).replace(r'', pd.NA)
 
-        # Strip whitespaces from both single and list values
-        df.loc[:, ATTRS[1:]] = df[ATTRS[1:]].astype('string').apply(lambda x: x.str.strip(), axis=1).replace(r'', pd.NA)
-        df.loc[:, 'tool'] = df.tool.reset_index(drop=True) \
-                                   .explode() \
-                                   .astype('string') \
-                                   .str.strip() \
-                                   .groupby(level=0).agg(lambda x: x.tolist() if x.notna().all() else pd.NA) \
-                                   .set_axis(df.index, axis=0)
+        # Perform the same on list values of the tool column
+        df['tool'] = df['tool'].explode().astype('string').str.strip() \
+                               .groupby(level=0).agg(lambda x: x.tolist() if x.notna().all() else pd.NA)
 
         # Use boolean mask to exclude invalid rows
-        isna = df.isna()
-        required = mask.reindex(df.index).astype('boolean')
-        permitted = required.notna()
-        validated = (isna & ~required) | (~isna & permitted)
+        activities = ["Acquisition", "Processing", "Modelling", "Optimising", "Exporting"]
+        mask = (
+            (df['class'].isin(activities)) &      # 'class' must be one of the allowed values
+            df['refersTo'].notna() &              # 'refersTo' must be defined
+            df['institute'].notna() &             # 'institute' must be defined
+            (
+                (df['class'] == 'Acquisition') & df['technique'].notna() |  # Acquisition with technique defined
+                (df['class'] != 'Acquisition') & df['technique'].isna()     # Non-Acquisition with technique undefined
+            )
+        )
 
-        return df[validated.all(axis=1)].reset_index(names='class')
-
-
-
+        return df[mask]
 
     def pushDataToDb(self, path: str) -> bool:
         if not (db := self.getDbPathOrUrl()):
@@ -103,9 +100,9 @@ class ProcessDataUploadHandler(UploadHandler):
 
         # Flatten the JSON document into a DataFrame
         df = pd.json_normalize(json_doc)
-        array = self.validate(df).to_numpy(dtype=object, na_value=None)
+        array = self._validate(df).to_numpy(dtype=object, na_value=None)
 
-        activity_query = f"INSERT INTO Activity ({', '.join(ATTRS)}) VALUES ({', '.join(['?'] * len(ATTRS))})"
+        activity_query = f"INSERT INTO Activity (class, refersTo, technique, institute, person, start, end) VALUES (?, ?, ?, ?, ?, ?, ?)"
         tool_query = "INSERT INTO Tool (activityId, tool) VALUES (?, ?)"
 
         try:
@@ -143,7 +140,7 @@ class ProcessDataQueryHandler(QueryHandler):
         condition: str = ''
     ) -> List[Any]:
         """
-        Performs a unified query to retrieve the values of a column in all activity tables for the rows that match the condition.
+        Performs a query to retrieve the values of a column of the main activity table for the rows that match the condition.
         """
         db = self.getDbPathOrUrl()
 
@@ -173,9 +170,8 @@ class ProcessDataQueryHandler(QueryHandler):
         activities = {}
         db = self.getDbPathOrUrl()
 
-        cols = ", ".join(ATTRS)
         query = f"""
-            SELECT {cols}, GROUP_CONCAT(T.tool) AS tool
+            SELECT class, refersTo, technique, institute, person, start, end, GROUP_CONCAT(T.tool) AS tool
             FROM Activity AS A
             JOIN Tool AS T
             ON A.internalId = T.activityId
@@ -183,7 +179,7 @@ class ProcessDataQueryHandler(QueryHandler):
             GROUP BY A.internalId;
             """
         with sqlite3.connect(db) as con:
-            df = pd.read_sql_query(query, con)
+            df = pd.read_sql_query(query, con, dtype='object')
 
         # Split tool combined string in a set
         df.tool = df.tool.apply(lambda x: set(x.split(',')) if x else None)
