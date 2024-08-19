@@ -59,22 +59,22 @@ class Test_01_IncompleteData(unittest.TestCase):
     
     def test_01_metadata_completeness(self):
         objects = self.m.getAllCulturalHeritageObjects()
-        required = ['identifier', 'title', 'owner', 'place']
         for obj in objects:
-            for name in required:
-                attr = getattr(obj, name)
-                self.assertIsInstance(attr, str)
-            hasAuthor = obj.hasAuthor
+            self.assertIsInstance(obj.getId(), str)
+            self.assertIsInstance(obj.getTitle(), str)
+            self.assertIsInstance(obj.getOwner(), str)
+            self.assertIsInstance(obj.getPlace(), str)
+            hasAuthor = obj.getAuthors()
             self.assertIsInstance(hasAuthor, list)
             for author in hasAuthor:
                 self.assertIsInstance(author, Person)
-            date = obj.date
+            date = obj.getDate()
             self.assertTrue(isinstance(date, str) or date is None)
 
         people = self.m.getAllPeople()
         for person in people:
-            self.assertIsInstance(person.identifier, str)
-            self.assertIsInstance(person.name, str)
+            self.assertIsInstance(person.getId(), str)
+            self.assertIsInstance(person.getName(), str)
 
     def test_02_metadata_integration(self):
         objs = {}
@@ -82,44 +82,44 @@ class Test_01_IncompleteData(unittest.TestCase):
             objs[i] = self.m.getEntityById(f'{i}')
 
         # Three authors added in different dbs
-        self.assertEqual(objs[1].hasAuthor, [Person('VIAF:30342047', 'Ardhanarishvara'), Person('VIAF:37015518', 'Eugenides, Jeffrey'), Person('VIAF:108159964', 'Plato')])
+        self.assertEqual(objs[1].getAuthors(), [Person('VIAF:30342047', 'Ardhanarishvara'), Person('VIAF:37015518', 'Eugenides, Jeffrey'), Person('VIAF:108159964', 'Plato')])
 
         # Author name inferred from other records in the db
-        self.assertEqual(objs[2].title, 'Desert horned viper and vipera ammodytes')
-        self.assertEqual(objs[2].hasAuthor, [Person('VIAF:100190422', 'Aldrovandi, Ulisse')])
+        self.assertEqual(objs[2].getTitle(), 'Desert horned viper and vipera ammodytes')
+        self.assertEqual(objs[2].getAuthors(), [Person('VIAF:100190422', 'Aldrovandi, Ulisse')])
 
         # Required and non required missing attributes pieced together
-        self.assertEqual(objs[3].date, '1916')
-        self.assertEqual(objs[3].owner, 'Biblioteca Universitaria di Sassari')
-        self.assertEqual(objs[3].hasAuthor, [Person('VIAF:7155985', 'Blacc, Aloe'), Person('VIAF:41843502', 'Mansfield, Katherine')])
+        self.assertEqual(objs[3].getDate(), '1916')
+        self.assertEqual(objs[3].getOwner(), 'Biblioteca Universitaria di Sassari')
+        self.assertEqual(objs[3].getAuthors(), [Person('VIAF:7155985', 'Blacc, Aloe'), Person('VIAF:41843502', 'Mansfield, Katherine')])
 
         # Author name missing and not present in other records in the db
         self.assertIsNone(objs[4])
 
         # If class or identifier is missing/incorrect the record is not added to the db
-        self.assertIsNone(objs[5].date)
+        self.assertIsNone(objs[5].getDate())
 
     def test_03_author_correctness(self):
         authors = self.m.getAllPeople()
         for author in authors:
-            authoredby = self.m.getCulturalHeritageObjectsAuthoredBy(author.identifier)
+            authoredby = self.m.getCulturalHeritageObjectsAuthoredBy(author.getId())
             for obj in authoredby:
-                self.assertIn(author, obj.hasAuthor)
+                self.assertIn(author, obj.getAuthors())
 
     def test_04_process_completeness(self):
         activities = self.m.getAllActivities()
         for activity in activities:
-            self.assertIsInstance(activity.institute, str)
-            self.assertIsInstance(activity.object, CulturalHeritageObject)
-            self.assertTrue(isinstance(activity.person, str) or activity.person is None)
-            self.assertTrue(isinstance(activity.start, str) or activity.start is None)
-            self.assertTrue(isinstance(activity.end, str) or activity.end is None)
-            tools = activity.tool
+            self.assertIsInstance(activity.getResponsibleInstitute(), str)
+            self.assertIsInstance(activity.refersTo(), CulturalHeritageObject)
+            self.assertTrue(isinstance(activity.getResponsiblePerson(), str) or activity.getResponsiblePerson() is None)
+            self.assertTrue(isinstance(activity.getStartDate(), str) or activity.getStartDate() is None)
+            self.assertTrue(isinstance(activity.getEndDate(), str) or activity.getEndDate() is None)
+            tools = activity.getTools()
             self.assertIsInstance(tools, set)
             for tool in tools:
                 self.assertIsInstance(tool, str)
             if isinstance(activity, Acquisition):
-                self.assertIsInstance(activity.technique, str)
+                self.assertIsInstance(activity.getTechnique(), str)
 
     def test_05_process_integration(self):
         dfs1 = []
@@ -138,30 +138,24 @@ class Test_01_IncompleteData(unittest.TestCase):
         p3 = self.m.toActivity(dfs3)
 
         # Technique from db2 because in db1 activity was discarded
-        self.assertEqual(p1[0].technique, 'Photogrammetry')
-
-        # Subsequent pushes on same db
-        #self.assertIsNone(p1[1].person)
-
-        # Integration of data from different dbs only for whole activity, not single values
-        #self.assertIsNone(p1[1].end)
-        #self.assertEqual(p1[1].tool, set())
+        self.assertEqual(p1[0].getTechnique(), 'Photogrammetry')
 
         # Institute from second push on db1 because in first push the activity was discarded
         for p in p1:
             if isinstance(p, Modelling):
-                self.assertEqual(p.institute, 'Philology')
+                self.assertEqual(p.getResponsibleInstitute(), 'Philology')
 
         # Integration of new type of activity on same object from different db
         self.assertTrue(any(isinstance(activity, Optimising) for activity in p2))
 
+        # Not handled anymore
         # Not compliant institute datatype
         #self.assertFalse(any(isinstance(activity, Acquisition) for activity in p3))
 
     def test_06_refersTo_correctness(self):
         objects = self.m.getAllCulturalHeritageObjects()
         for activity in self.m.getAllActivities():
-            self.assertIn(activity.object, objects)
+            self.assertIn(activity.refersTo(), objects)
 
     def test_07_process_order(self):
         activities = self.m.getAllActivities()
