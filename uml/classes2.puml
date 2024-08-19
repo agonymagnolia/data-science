@@ -1,0 +1,95 @@
+@startuml
+class "streamlod.handlers.base.Handler" as streamlod.handlers.base.Handler {
+  dbPathOrUrl : str
+  getDbPathOrUrl() -> str
+  setDbPathOrUrl(pathOrUrl: str) -> bool
+}
+class "streamlod.handlers.base.QueryHandler" as streamlod.handlers.base.QueryHandler {
+  getById(id: str)
+  getDbPathOrUrl() -> str
+}
+class "streamlod.handlers.base.UploadHandler" as streamlod.handlers.base.UploadHandler {
+  pushDataToDb(path: str)
+}
+class "streamlod.handlers.metadata.MetadataQueryHandler" as streamlod.handlers.metadata.MetadataQueryHandler {
+  sparql : SPARQLWrapper, Optional[SPARQLWrapper]
+  _filter_map(entityName: str, by: Union[str, tuple[str, ...]]) -> str
+  _query(query: str) -> 
+  getAllCulturalHeritageObjects() -> 
+  getAllPeople() -> 
+  getAuthorsOfCulturalHeritageObject(objectId: Some[str]) -> 
+  getById(identifier: Some[str]) -> 
+  getCulturalHeritageObjectsAuthoredBy(personId: Some[str]) -> 
+  getEntities(entityName: str, select_only: Optional[str], by: Optional[Union[str, tuple[str, ...]]], value: Any) -> Union[pd.DataFrame, np.ndarray[Any]]
+  setDbPathOrUrl(newDbPathOrUrl: str) -> bool
+}
+class "streamlod.handlers.metadata.MetadataUploadHandler" as streamlod.handlers.metadata.MetadataUploadHandler {
+  store : SPARQLUpdateStore
+  _check_class(string: str) -> Union[str, 'NAType']
+  _validateIDE(df, entityName: str) -> 
+  clearDb() -> bool
+  pushDataToDb(path: str) -> bool
+  setDbPathOrUrl(newDbPathOrUrl: str) -> bool
+  toRDF(df, entityName: str) -> Generator[str, None, None]
+}
+class "streamlod.handlers.process.ProcessDataQueryHandler" as streamlod.handlers.process.ProcessDataQueryHandler {
+  getAcquisitionsByTechnique(partialName: str) -> 
+  getActivities(condition: str) -> 
+  getActivitiesByResponsibleInstitution(partialName: str) -> 
+  getActivitiesByResponsiblePerson(partialName: str) -> 
+  getActivitiesEndedBefore(date: str) -> 
+  getActivitiesStartedAfter(date: str) -> 
+  getActivitiesUsingTool(partialName: str) -> 
+  getAllActivities() -> 
+  getAttribute(attribute: str, condition: str) -> List[Any]
+  getById(identifier: Union[str, List[str]]) -> 
+}
+class "streamlod.handlers.process.ProcessDataUploadHandler" as streamlod.handlers.process.ProcessDataUploadHandler {
+  _json_map : dict
+  clearDb() -> bool
+  pushDataToDb(path: str) -> bool
+  setDbPathOrUrl(newDbPathOrUrl: str) -> bool
+  validate(df) -> 
+}
+class "streamlod.mashups.advanced_mashup.AdvancedMashup" as streamlod.mashups.advanced_mashup.AdvancedMashup {
+  getActivitiesOnObjectsAuthoredBy(personId: str) -> List[Activity]
+  getAuthorsOfObjectsAcquiredInTimeFrame(start: str, end: str) -> List[Person]
+  getObjectsHandledByResponsibleInstitution(partialName: str) -> List[CulturalHeritageObject]
+  getObjectsHandledByResponsiblePerson(partialName: str) -> List[CulturalHeritageObject]
+}
+class "streamlod.mashups.basic_mashup.BasicMashup" as streamlod.mashups.basic_mashup.BasicMashup {
+  metadataQuery : list
+  processQuery : list
+  _integrate(dfs: List[pd.DataFrame], entity_name: str) -> 
+  _normalize(dfs: Union[pd.DataFrame, List[pd.DataFrame]], entity_name: str) -> 
+  _validate(df, entity_name: str) -> 
+  addMetadataHandler(handler: MetadataQueryHandler) -> bool
+  addProcessHandler(handler: ProcessDataQueryHandler) -> bool
+  cleanMetadataHandlers() -> bool
+  cleanProcessHandlers() -> bool
+  getAcquisitionsByTechnique(partialName: str) -> List[Activity]
+  getActivitiesByResponsibleInstitution(partialName: str) -> List[Activity]
+  getActivitiesByResponsiblePerson(partialName: str) -> List[Activity]
+  getActivitiesEndedBefore(date: str) -> List[Activity]
+  getActivitiesStartedAfter(date: str) -> List[Activity]
+  getActivitiesUsingTool(partialName: str) -> List[Activity]
+  getAllActivities() -> List[Activity]
+  getAllCulturalHeritageObjects() -> List[CulturalHeritageObject]
+  getAllPeople() -> List[Person]
+  getAuthorsOfCulturalHeritageObject(objectId: str) -> List[Person]
+  getCulturalHeritageObjectsAuthoredBy(personId: str) -> List[CulturalHeritageObject]
+  getCulturalHeritageObjectsByIds(identifiers: Iterable[str]) -> List[CulturalHeritageObject]
+  getEntityById(identifier: str) -> Union[IdentifiableEntity, None]
+  toActivity(dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Activity]
+  toCHO(dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[CulturalHeritageObject]
+  toPerson(dfs: Union[pd.DataFrame, List[pd.DataFrame]]) -> List[Person]
+}
+
+streamlod.handlers.base.QueryHandler --|> streamlod.handlers.base.Handler
+streamlod.handlers.base.UploadHandler --|> streamlod.handlers.base.Handler
+streamlod.handlers.metadata.MetadataQueryHandler --|> streamlod.handlers.base.QueryHandler
+streamlod.handlers.metadata.MetadataUploadHandler --|> streamlod.handlers.base.UploadHandler
+streamlod.handlers.process.ProcessDataQueryHandler --|> streamlod.handlers.base.QueryHandler
+streamlod.handlers.process.ProcessDataUploadHandler --|> streamlod.handlers.base.UploadHandler
+streamlod.mashups.advanced_mashup.AdvancedMashup --|> streamlod.mashups.basic_mashup.BasicMashup
+@enduml

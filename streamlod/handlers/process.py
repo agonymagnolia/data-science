@@ -1,5 +1,6 @@
 from typing import Union, Any, List, Dict, Set, Mapping, Iterable
 import pandas as pd
+import numpy as np
 import json
 import sqlite3
 
@@ -7,10 +8,10 @@ from streamlod.handlers.base import UploadHandler, QueryHandler
 from streamlod.entities.mappings import ACTIVITIES, ACTIVITY_ATTRIBUTES, ACQUISITION_ATTRIBUTES
 from streamlod.utils import id_join, sorter
 
+ATTRS = ['class', 'refersTo', 'technique', 'institute', 'person', 'start', 'end']
 
 class ProcessDataUploadHandler(UploadHandler):
     _json_map = {
-            'object id': 'refersTo',
             'responsible institute': 'institute',
             'responsible person': 'person',
             'technique': 'technique',
@@ -54,35 +55,32 @@ class ProcessDataUploadHandler(UploadHandler):
             print(e)
             return False
 
-    def validate(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame | pd.Series]:
-        result = {}
-        df.columns = pd.MultiIndex.from_tuples(((e[0].capitalize(), self._json_map[e[1]]) if len(e) > 1 else ('', self._json_map[e[0]]) for e in df.columns.str.split('.')))
-        df.set_index(df.columns[0], inplace=True)
-        df = df.stack(level=0, future_stack=True)
-        df.reset_index(level=0, names=['refersTo'], inplace=True)
-
+    def validate(self, df: pd.DataFrame) -> pd.DataFrame:
         mask = pd.DataFrame(ACTIVITIES).T
-        df = df.reindex(mask.columns, axis=1) # Allows for missing columns like technique, filled with NaNs
 
-        multivalued = [attr for attr, (_, multivalued) in ACTIVITY_ATTRIBUTES.items() if multivalued]
-        main_cols = [col for col in df.columns if col not in multivalued]
+        # Reshape DataFrame with activity classes as index and attributes as columns
+        df.set_index('object id', inplace=True)
+        df.columns = pd.MultiIndex.from_tuples(((activity.capitalize(), self._json_map[attr]) for activity, attr in df.columns.str.split('.')), names=['class', 'attributes'])
+        df = df.stack(level=0, future_stack=True) \
+               .reset_index(level='object id', names='refersTo') \
+               .reindex(mask.columns, axis=1) # Allow for missing columns like technique, filled with NaNs
 
-        df[main_cols] = df[main_cols].astype('string').apply(lambda x: x.str.strip(), axis=1)
-        df = df.map(lambda x: pd.NA if len(x)==0 else x, na_action='ignore')
+        # Strip whitespaces from both single and list values
+        df.loc[:, ATTRS[1:]] = df[ATTRS[1:]].astype('string').apply(lambda x: x.str.strip(), axis=1).replace(r'', pd.NA)
+        df.loc[:, 'tool'] = df.tool.reset_index(drop=True) \
+                                   .explode() \
+                                   .astype('string') \
+                                   .str.strip() \
+                                   .groupby(level=0).agg(lambda x: x.tolist() if x.notna().all() else pd.NA) \
+                                   .set_axis(df.index, axis=0)
 
+        # Use boolean mask to exclude invalid rows
         isna = df.isna()
-        required = mask.map(lambda x: x[0], na_action='ignore').reindex(df.index).astype('boolean')
+        required = mask.reindex(df.index).astype('boolean')
         permitted = required.notna()
         validated = (isna & ~required) | (~isna & permitted)
-        df = df[validated.all(axis=1)].reset_index(names=['class'])
-        main_cols.insert(0, 'class')
 
-        if not df.empty:
-            result['activity'] = df[main_cols].to_numpy(dtype=object, na_value=None)
-        for col in multivalued:
-            result[col] = df[col].explode().astype('string').str.strip().groupby(level=0).agg(lambda x: x.tolist() if x.notna().all() else []).to_numpy(dtype=object, na_value=None)
-
-        return result, main_cols
+        return df[validated.all(axis=1)].reset_index(names='class')
 
 
 
@@ -105,29 +103,23 @@ class ProcessDataUploadHandler(UploadHandler):
 
         # Flatten the JSON document into a DataFrame
         df = pd.json_normalize(json_doc)
-        df_dict, main_cols = self.validate(df)
+        array = self.validate(df).to_numpy(dtype=object, na_value=None)
 
-        queries = []
-        for pos, name in enumerate(df_dict.keys()):
-            if pos == 0:
-                queries.append(f"INSERT INTO Activity ({', '.join(list(main_cols))}) VALUES ({', '.join(['?'] * len(main_cols))})")
-            else:
-                queries.append(f"INSERT INTO {name.capitalize()} (activityId, {name}) VALUES (?, ?)")
+        activity_query = f"INSERT INTO Activity ({', '.join(ATTRS)}) VALUES ({', '.join(['?'] * len(ATTRS))})"
+        tool_query = "INSERT INTO Tool (activityId, tool) VALUES (?, ?)"
 
         try:
             with sqlite3.connect(db) as con:
                 cursor = con.cursor()
-                internalId = 0
-                for row in zip(*df_dict.values()):
-                    for pos, query in enumerate(queries):
-                        if pos == 0:
-                            cursor.execute(query,(row[pos]))
-                            internalId = cursor.lastrowid
-                        elif (values := row[pos]):
-                            cursor.executemany(query, [(internalId, val) for val in values])
-                        else:
-                            cursor.execute(query, (internalId, None))
+                for row in array:
+                    cursor.execute(activity_query,(row[:-1]))
+                    internalId = cursor.lastrowid
+                    if (tools := row[-1]):
+                        cursor.executemany(tool_query, [(internalId, tool) for tool in tools])
+                    else:
+                        cursor.execute(tool_query, (internalId, None))
             return True
+
         except sqlite3.OperationalError as e:
             print(e)
             return False
@@ -181,11 +173,9 @@ class ProcessDataQueryHandler(QueryHandler):
         activities = {}
         db = self.getDbPathOrUrl()
 
-        attrs = list(ACQUISITION_ATTRIBUTES.keys())
-        attrs.remove('tool') # Exclude the tool column
-        cols = ", ".join(attrs)
+        cols = ", ".join(ATTRS)
         query = f"""
-            SELECT class, {cols}, GROUP_CONCAT(T.tool) AS tool
+            SELECT {cols}, GROUP_CONCAT(T.tool) AS tool
             FROM Activity AS A
             JOIN Tool AS T
             ON A.internalId = T.activityId
